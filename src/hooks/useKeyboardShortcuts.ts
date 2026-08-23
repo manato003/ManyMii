@@ -17,6 +17,7 @@ interface ShortcutHandlers {
  *   Escape  → 開いているモーダルを閉じる
  *
  * input / textarea / contenteditable にフォーカス中はスキップ
+ * Ctrl / Cmd / Alt との組み合わせ（Ctrl+A の全選択など）もスキップ
  */
 export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
     const {
@@ -29,6 +30,9 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
 
     useEffect(() => {
         const handle = (e: KeyboardEvent) => {
+            // ブラウザ標準のショートカット（Ctrl+A 全選択、Cmd+P 印刷など）を奪わない
+            if (e.ctrlKey || e.metaKey || e.altKey) return;
+
             const el = e.target as HTMLElement;
             if (
                 el.tagName === 'INPUT' ||

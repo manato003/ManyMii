@@ -104,13 +104,18 @@
   transition: color 0.1s, background 0.1s;
 }
 
-.side-panel-pin:hover {
+.side-panel-pin:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.1);
   color: var(--text-primary);
 }
 
 .side-panel-pin.active {
   color: var(--accent);
+}
+
+.side-panel-pin:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 .side-panel-count {

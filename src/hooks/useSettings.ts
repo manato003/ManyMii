@@ -9,6 +9,8 @@ export interface AppSettings {
     chatWidth: 240 | 280 | 340;
     /** パネルのホバー感度 → useHoverPanel の hideDelay にマッピング */
     panelSensitivity: 'slow' | 'normal' | 'fast';
+    /** オフライン枠のライブ状態を定期的に自動再確認する */
+    autoRefreshOffline: boolean;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -16,6 +18,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     headerAlwaysVisible: false,
     chatWidth: 280,
     panelSensitivity: 'normal',
+    autoRefreshOffline: true,
 };
 const STORAGE_KEY = 'appSettings';
 

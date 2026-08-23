@@ -24,6 +24,9 @@ const HIDE_THRESHOLD = HEADER_H * 5;
 
 const STREAMS_KEY = 'activeStreams';
 
+/** オフライン枠のライブ状態を自動再確認する間隔 */
+const AUTO_REFRESH_MS = 5 * 60 * 1000;
+
 /** localStorage から配信リストを復元する（他のフックと同じ遅延初期化パターン） */
 function loadStreams(): Stream[] {
   try {
@@ -127,6 +130,42 @@ function App() {
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', 'dark');
   }, []);
+
+  // setInterval から最新の streams を読むための参照
+  const streamsRef = useRef(streams);
+  useEffect(() => { streamsRef.current = streams; }, [streams]);
+
+  /**
+   * オフライン / 取得失敗の YouTubeチャンネル枠をまとめて再解決する。
+   * プロキシに負荷をかけないよう逐次実行する（ライブ中の枠は video ID が
+   * 変わらないので対象外）。
+   */
+  const refreshOfflineStreams = useCallback(async (showSpinner: boolean) => {
+    const targets = streamsRef.current.filter(
+      s => s.channelHandle && s.isLive !== true && !s.isResolving,
+    );
+    if (targets.length === 0) return;
+
+    if (showSpinner) {
+      const ids = new Set(targets.map(s => s.id));
+      setStreams(prev => prev.map(s => ids.has(s.id) ? { ...s, isResolving: true } : s));
+    }
+    for (const s of targets) {
+      await resolveStreamInBackground(s.id, s.channelHandle!);
+    }
+  }, [resolveStreamInBackground]);
+
+  const handleRefreshOffline = useCallback(() => { void refreshOfflineStreams(true); }, [refreshOfflineStreams]);
+
+  // オフライン枠の定期再確認。タブが見えていないときは何もしない
+  useEffect(() => {
+    if (!settings.autoRefreshOffline) return;
+    const id = setInterval(() => {
+      if (document.hidden) return;
+      void refreshOfflineStreams(false);
+    }, AUTO_REFRESH_MS);
+    return () => clearInterval(id);
+  }, [settings.autoRefreshOffline, refreshOfflineStreams]);
 
   // 起動時: 復元した YouTubeチャンネル枠の video ID を再取得する。
   // スピナーは出さず、解決できたら差し替える（前回の枠がすぐ再生される）
@@ -327,6 +366,12 @@ function App() {
 
   const visibleStreams = useMemo(() => streams.filter(s => !s.hidden), [streams]);
 
+  // 再確認の対象になる枠（YouTubeチャンネル枠でライブ中でないもの）
+  const offlineChannelCount = useMemo(
+    () => streams.filter(s => s.channelHandle && s.isLive !== true).length,
+    [streams],
+  );
+
   // 常時表示設定のときは state に依存せず必ず表示する
   const isHeaderVisible = settings.headerAlwaysVisible || headerVisible;
 
@@ -401,6 +446,8 @@ function App() {
           onPinChange={setIsStreamPinned}
           getFavFolders={getFavFolders}
           onAddStreamToFavorites={handleAddStreamToFavorites}
+          offlineChannelCount={offlineChannelCount}
+          onRefreshOffline={handleRefreshOffline}
         />
         <StreamGrid
           streams={visibleStreams}

@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
-import { EyeOff, Eye, Plus, X, Clock, GripVertical, ChevronRight, Star, FolderPlus, Pin, PinOff, ArrowRight, Trash2 } from 'lucide-react';
+import { EyeOff, Eye, Plus, X, Clock, GripVertical, ChevronRight, Star, FolderPlus, Pin, PinOff, ArrowRight, Trash2, RefreshCw } from 'lucide-react';
 import type { Stream, FavoriteNode } from '../types';
 import type { Locale } from '../i18n';
 import type { HistoryEntry } from '../hooks/useStreamHistory';
@@ -54,6 +54,9 @@ interface StreamSidePanelProps {
     onPinChange?: (pinned: boolean) => void;
     getFavFolders?: () => FolderInfo[];
     onAddStreamToFavorites?: (stream: Stream) => void;
+    /** ライブ状態を再確認できる枠の数（0 のときボタンは無効） */
+    offlineChannelCount: number;
+    onRefreshOffline: () => void;
 }
 
 const StreamSidePanel: React.FC<StreamSidePanelProps> = ({
@@ -64,6 +67,7 @@ const StreamSidePanel: React.FC<StreamSidePanelProps> = ({
     onAddToFavorites, onBulkAddFromFolder,
     isPinned = false, onPinChange, getFavFolders,
     onAddStreamToFavorites,
+    offlineChannelCount, onRefreshOffline,
 }) => {
     const { visible, show, scheduleHide } = useHoverPanel({ hideDelay, idleTimeout: 5000, isPinned });
 
@@ -295,6 +299,17 @@ const StreamSidePanel: React.FC<StreamSidePanelProps> = ({
                     <div className="side-panel-header-row">
                         <span className="side-panel-title">{label('配信管理', 'Streams')}</span>
                         <div className="side-panel-header-actions">
+                            <button
+                                className="side-panel-pin"
+                                onClick={onRefreshOffline}
+                                disabled={offlineChannelCount === 0}
+                                title={offlineChannelCount > 0
+                                    ? label(`オフライン枠を再確認 (${offlineChannelCount})`, `Re-check offline streams (${offlineChannelCount})`)
+                                    : label('再確認できる枠がありません', 'Nothing to re-check')}
+                                aria-label={label('オフライン枠を再確認', 'Re-check offline streams')}
+                            >
+                                <RefreshCw size={13} />
+                            </button>
                             <button
                                 className={`side-panel-pin${isPinned ? ' active' : ''}`}
                                 onClick={() => onPinChange?.(!isPinned)}

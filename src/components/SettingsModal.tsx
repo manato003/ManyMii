@@ -112,6 +112,26 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, locale, settings
                             aria-label={label('ヘッダーを常時表示', 'Always show header')}
                         />
                     </div>
+                    <div className="settings-row">
+                        <div className="settings-row-label">
+                            <span className="settings-label">
+                                {label('オフライン枠を自動で再確認', 'Auto re-check offline streams')}
+                            </span>
+                            <span className="settings-description">
+                                {label(
+                                    'ライブ中でない枠だけ5分ごとに確認（タブ非表示中は停止）',
+                                    'Checks only non-live streams every 5 min (paused when tab is hidden)',
+                                )}
+                            </span>
+                        </div>
+                        <button
+                            className={`settings-toggle${settings.autoRefreshOffline ? ' on' : ''}`}
+                            onClick={() => onUpdateSetting('autoRefreshOffline', !settings.autoRefreshOffline)}
+                            role="switch"
+                            aria-checked={settings.autoRefreshOffline}
+                            aria-label={label('オフライン枠を自動で再確認', 'Auto re-check offline streams')}
+                        />
+                    </div>
                 </div>
 
                 {/* ── パネル ── */}

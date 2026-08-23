@@ -68,6 +68,26 @@ function updateNode(tree: FavoriteNode[], id: string, updater: (n: FavoriteNode)
     });
 }
 
+/** 指定 ID のフォルダがツリー内に存在するか */
+function hasFolder(tree: FavoriteNode[], id: string): boolean {
+    for (const node of tree) {
+        if (node.kind !== 'folder') continue;
+        if (node.id === id) return true;
+        if (hasFolder(node.children, id)) return true;
+    }
+    return false;
+}
+
+/** フォルダの入れ子の高さ（サブフォルダを持たないフォルダ = 0） */
+function folderHeight(node: FavoriteNode): number {
+    if (node.kind !== 'folder') return 0;
+    let h = 0;
+    for (const child of node.children) {
+        if (child.kind === 'folder') h = Math.max(h, folderHeight(child) + 1);
+    }
+    return h;
+}
+
 /** ノードの深度を取得（0 = ルート） */
 function getDepth(tree: FavoriteNode[], id: string, depth = 0): number {
     for (const node of tree) {
@@ -219,8 +239,24 @@ export function useFavorites() {
 
     const moveNode = useCallback((nodeId: string, targetFolderId: string | null) => {
         persist(prev => {
+            if (nodeId === targetFolderId) return prev;
+
             const [cleaned, removed] = findAndRemove(prev, nodeId);
             if (!removed) return prev;
+
+            // 移動先が自分自身の子孫だと findAndRemove で一緒に切り離されてしまい、
+            // insertInto が親を見つけられずサブツリーが丸ごと消える。存在確認で防ぐ。
+            if (targetFolderId !== null && !hasFolder(cleaned, targetFolderId)) return prev;
+
+            // フォルダ移動時は MAX_DEPTH を超えないことを保証する
+            // （UI 側のサブフォルダ追加ボタン非表示だけではドラッグ経由で破れるため）
+            if (removed.kind === 'folder') {
+                const targetDepth = targetFolderId === null ? -1 : getDepth(cleaned, targetFolderId);
+                if (targetDepth === -1 && targetFolderId !== null) return prev;
+                const newDepth = targetDepth + 1;
+                if (newDepth + folderHeight(removed) > MAX_DEPTH - 1) return prev;
+            }
+
             return insertInto(cleaned, targetFolderId, removed);
         });
     }, [persist]);

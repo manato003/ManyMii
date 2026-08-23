@@ -94,12 +94,23 @@ function App() {
     if (savedLocale) setLocale(savedLocale);
     const savedStreams = localStorage.getItem('activeStreams');
     if (savedStreams) {
-      try { setStreams(JSON.parse(savedStreams)); } catch (e) { console.error(e); }
+      try {
+        // 旧バージョンが isResolving: true を保存している可能性があるため必ず落とす
+        const parsed = JSON.parse(savedStreams) as Stream[];
+        setStreams(parsed.map(s => ({ ...s, isResolving: false })));
+      } catch (e) { console.error(e); }
     }
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('activeStreams', JSON.stringify(streams));
+    // isResolving は実行時のみのフラグ。保存してしまうと解決中にタブを閉じた枠が
+    // 次回起動時に「ライブ確認中...」のまま固まるため、永続化時に取り除く
+    const persisted = streams.map(s => {
+      const copy: Stream = { ...s };
+      delete copy.isResolving;
+      return copy;
+    });
+    localStorage.setItem('activeStreams', JSON.stringify(persisted));
   }, [streams]);
 
   useEffect(() => {

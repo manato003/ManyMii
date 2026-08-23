@@ -226,6 +226,15 @@ CSS の `order` で表現する。** `streams` 配列の順序をそのまま DO
 
 コメントパネルに出せるのは Twitch のチャンネル枠と、ライブ中の YouTube 枠のみ。
 
+チャットの埋め込みURLには**必ずダークテーマ指定を付ける**。付けないと白背景になる。
+
+| | パラメータ |
+|---|---|
+| Twitch | `&darkpopout` |
+| YouTube | `&dark_theme=1`（`<html>` に `dark` 属性が付く） |
+
+iframe 自体にも `background: var(--bg-primary)` を敷いて、読み込み中の白いちらつきを防ぐ。
+
 ## 7. 共有コード
 
 `btoa(encodeURIComponent(JSON.stringify(data)))` の Base64 文字列。

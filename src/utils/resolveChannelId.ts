@@ -336,7 +336,9 @@ export async function resolveTwitchChannelName(login: string): Promise<string | 
         } catch {
             html = await fetchViaProxy(url, { minLength: 500 });
         }
-        const strip = (s: string) => s.replace(/\s*-\s*Twitch\s*$/i, '').trim();
+        // 末尾の "- Twitch" / "- Live on Twitch" / "- Twitchでライブ配信中" などを落とす。
+        // 区切り記号をまたがないので、チャンネル名にハイフンが含まれていても壊れない。
+        const strip = (s: string) => s.replace(/\s*[-–—|]\s*[^-–—|]*Twitch[^-–—|]*\s*$/i, '').trim();
         const og = html.match(/<meta property="og:title" content="([^"]{1,80})"/);
         if (og) {
             const name = strip(og[1]);

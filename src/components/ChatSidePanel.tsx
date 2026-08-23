@@ -25,7 +25,8 @@ function getChatUrl(stream: Stream): string | null {
         stream.isLive !== false &&
         !stream.isResolving
     ) {
-        return `https://www.youtube.com/live_chat?v=${stream.sourceId}&embed_domain=${domain}`;
+        // dark_theme=1 がないと YouTube のチャットだけ白背景になる（Twitch は darkpopout）
+        return `https://www.youtube.com/live_chat?v=${stream.sourceId}&embed_domain=${domain}&dark_theme=1`;
     }
     return null;
 }

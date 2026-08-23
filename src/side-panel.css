@@ -817,6 +817,8 @@
   width: 100%;
   height: 100%;
   border: none;
+  /* iframe の読み込み中に白がちらつかないよう下地を暗くしておく */
+  background: var(--bg-primary);
 }
 
 .chat-panel-empty {

@@ -264,7 +264,13 @@ function App() {
           if (!info || !info.handle) return;
           if (info.channelName) propagateDisplayName('youtube', info.handle, info.channelName);
           setStreams(prev => prev.map(s => s.id === stream.id
-            ? { ...s, title: `YouTube: @${info.handle}`, channelHandle: info.handle ?? undefined, displayName: info.channelName ?? s.displayName }
+            ? {
+                ...s,
+                title: `YouTube: @${info.handle}`,
+                channelHandle: info.handle ?? undefined,
+                channelId: info.channelId ?? s.channelId,
+                displayName: info.channelName ?? s.displayName,
+              }
             : s));
         })
         .catch(err => console.warn('[App] video handle resolve failed:', err));

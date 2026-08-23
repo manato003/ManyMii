@@ -203,6 +203,49 @@ export function parseChannelPage(html: string): ChannelPageInfo {
     return base;
 }
 
+export interface WatchPageInfo {
+    /** @ を除いたチャンネルハンドル */
+    handle: string | null;
+    channelId?: string;
+    channelName?: string;
+}
+
+/**
+ * 動画ページから投稿チャンネルを逆引きする。
+ *
+ * ytInitialData のチャンネルリンクは、表示名・チャンネルID・ハンドルが
+ * 1つのまとまりとして隣接している:
+ *
+ *   "text":"藍沢エマ / Aizawa Ema","navigationEndpoint":{ …
+ *     "browseEndpoint":{"browseId":"UCPkKpOHxEDcwmUAnRpIu-Ng",
+ *                       "canonicalBaseUrl":"/@AizawaEma"}}
+ *
+ * 位置ではなくこの構造で捕まえる。videoOwnerRenderer を起点にすると、
+ * 先に出現する videoPrimaryInfoRenderer の「動画タイトル」を拾ってしまう。
+ */
+const CHANNEL_LINK_RE =
+    /"text"\s*:\s*"([^"]{1,80})"\s*,\s*"navigationEndpoint"[\s\S]{0,800}?"browseId"\s*:\s*"(UC[a-zA-Z0-9_-]{22})"\s*,\s*"canonicalBaseUrl"\s*:\s*"\/@([^"]{1,60})"/;
+
+export function parseWatchPage(html: string): WatchPageInfo {
+    const linked = html.match(CHANNEL_LINK_RE);
+    if (linked) {
+        return {
+            handle: decodeJsonString(linked[3]),
+            channelId: linked[2],
+            channelName: decodeJsonString(linked[1]),
+        };
+    }
+
+    // 構造が変わっていた場合の保険（表示名は諦める）
+    const handleMatch = html.match(/"canonicalBaseUrl"\s*:\s*"\/@([^"]{1,60})"/);
+    const idMatch = html.match(/"channelId"\s*:\s*"(UC[a-zA-Z0-9_-]{22})"/);
+    return {
+        handle: handleMatch ? decodeJsonString(handleMatch[1]) : null,
+        channelId: idMatch ? idMatch[1] : undefined,
+        channelName: undefined,
+    };
+}
+
 /** 識別子から /live ページのURLを組み立てる */
 function livePageUrl(identifier: string): string {
     if (isYouTubeChannelId(identifier)) {
@@ -250,19 +293,29 @@ export async function resolveYouTubeChannel(identifier: string): Promise<Resolve
     }
 }
 
-/** YouTubeの video ID からチャンネルのハンドルと表示名を取得する */
-export async function resolveVideoToChannel(
-    videoId: string,
-): Promise<{ handle: string | null; channelName?: string } | null> {
+/**
+ * YouTubeの video ID から投稿チャンネル（ハンドル・チャンネルID・表示名）を逆引きする。
+ * チャンネル解決と同じく、レンダリング済みページを優先し、素のプロキシを保険にする。
+ */
+export async function resolveVideoToChannel(videoId: string): Promise<WatchPageInfo | null> {
+    const url = `https://www.youtube.com/watch?v=${videoId}`;
+
     try {
-        const html = await fetchViaProxy(`https://www.youtube.com/watch?v=${videoId}`, {
-            minLength: 1000,
-            isUsable: isUsableYouTubePage,
-        });
-        const m = html.match(/"canonicalBaseUrl"\s*:\s*"\/@([^"]{1,60})"/);
-        return { handle: m ? m[1] : null, channelName: extractChannelName(html) };
+        const html = await fetchRenderedPage(url);
+        if (!html.includes('ytInitialData')) throw new Error('No ytInitialData (degraded page)');
+        const info = parseWatchPage(html);
+        if (info.handle || info.channelId) return info;
+        throw new Error('No owner info found');
     } catch (err) {
-        console.warn(`[resolveVideoToChannel] failed for ${videoId}:`, err);
+        console.warn(`[resolveVideoToChannel] rendered watch page failed for ${videoId}:`, err);
+    }
+
+    try {
+        const html = await fetchViaProxy(url, { minLength: 1000, isUsable: isUsableYouTubePage });
+        const info = parseWatchPage(html);
+        return { ...info, channelName: info.channelName ?? extractChannelName(html) };
+    } catch (err) {
+        console.warn(`[resolveVideoToChannel] fallback failed for ${videoId}:`, err);
         return null;
     }
 }

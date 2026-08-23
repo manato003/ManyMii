@@ -115,6 +115,24 @@ ytInitialData ごと取得できる。CORSプリフライトにも対応して�
 
 成功率は低いが、経路1がレート制限などで使えないときの保険として残している。
 
+### 逆引き: 動画URL → チャンネル
+
+動画URLを貼られたときは、逆に投稿チャンネルを引く（`resolveVideoToChannel`）。
+同じく r.jina.ai でレンダリング済みの watch ページを取得し、ytInitialData 内で
+**表示名・チャンネルID・ハンドルが隣接している構造**を1つの正規表現で捕まえる。
+
+```
+"text":"藍沢エマ / Aizawa Ema","navigationEndpoint":{ …
+  "browseEndpoint":{"browseId":"UCPkKpOHxEDcwmUAnRpIu-Ng",
+                    "canonicalBaseUrl":"/@AizawaEma"}}
+```
+
+位置ではなく構造で捕まえること。`videoOwnerRenderer` を起点にすると、
+先に出現する `videoPrimaryInfoRenderer` の**動画タイトル**を拾ってしまう。
+
+これにより、動画URLで追加した枠にも `channelHandle` が付くため、
+以後はリロードや自動再確認でチャンネルとして再解決できるようになる。
+
 経路2のプロキシは `api.allorigins.win` → `api.codetabs.com` → `api.cors.lol` の順。
 **1リクエストあたり6秒で打ち切る。** 死んだプロキシは応答までに20秒以上かかることがあり、
 タイムアウトがないと逐次フォールバック全体が固まるため。

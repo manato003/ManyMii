@@ -1,50 +1,80 @@
 /**
- * Resolve a YouTube channel handle (@xxx) to a video ID.
+ * YouTubeのチャンネル識別子（@ハンドル / UCチャンネルID）から
+ * 現在配信中の video ID を解決する。
  *
- * Strategy:
- *   1. Fetch youtube.com/@handle/live via CORS proxy
- *   2. Extract video ID from <link rel="canonical">
- *   3. Accept if "isLiveNow":true OR ("isLive":true AND "hlsManifestUrl") is present
- *      - "isLiveNow":true  → standard live stream
- *      - "isLive":true + hlsManifestUrl → 24/7 streams (e.g. news channels)
- *      - hlsManifestUrl alone not checked: only present when actively streaming,
- *        so it guards against scheduled streams that have isLive:true but haven't started
- *   4. Not live → status: 'offline'（オフライン画面を表示。最新動画へのフォールバックはしない）
- *   5. プロキシが全滅した場合は status: 'error'。
- *      「オフライン」と同じ扱いにすると、実際は配信中でも取得に失敗しただけで
- *      「配信していません」と表示されてしまうため、必ず区別する。
+ * 手順:
+ *   1. CORSプロキシ経由で youtube.com/@handle/live （または /channel/UCxxx/live）を取得
+ *   2. 応答が「使える」ものか検証する（後述の縮退ページを弾く）
+ *   3. <link rel="canonical"> から video ID を抽出
+ *   4. ライブ判定:
+ *        "isLiveNow": true                        → 通常のライブ
+ *        "isLive": true かつ "hlsManifestUrl" あり → 24/7ストリーム（ニュース等）
+ *      予定配信は hlsManifestUrl を持たないため除外される
+ *   5. ライブでなければ offline。取得・検証に失敗したら error
  *
- * No API key or backend required.
- * Always fetches fresh data (no localStorage caching).
+ * APIキーもバックエンドも使わない。ライブ状態はキャッシュせず常に取得しに行く。
+ *
+ * ■ 縮退ページについて
+ * YouTubeはプロキシ経由のリクエストに対し、200 を返しながら中身のない
+ * ページ（canonical が "undefined"、title が空）を返すことがある。
+ * これを普通に解析すると canonical が取れず「オフライン」と誤判定するため、
+ * 明示的に検出して error 扱いにする。
  */
 
-const PROXIES = [
-    (url: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
-    (url: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+import { isYouTubeChannelId } from './parseInput';
+
+/**
+ * 1リクエストあたりの上限時間。
+ * 死んだプロキシは応答までに20秒以上かかることがあり、
+ * 直列フォールバックだと全体が固まるため必ず打ち切る。
+ */
+const FETCH_TIMEOUT_MS = 6000;
+
+/** 実測で成功率の高い順に並べること */
+const PROXIES: ((url: string) => string)[] = [
+    (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+    (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+    (url) => `https://api.cors.lol/?url=${encodeURIComponent(url)}`,
 ];
 
-async function fetchViaProxy(targetUrl: string): Promise<string> {
+async function fetchOnce(proxyUrl: string, minLength: number): Promise<string> {
+    const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const text = await res.text();
+    if (text.length < minLength) throw new Error(`Response too short (${text.length})`);
+    return text;
+}
+
+/**
+ * プロキシを順に試し、isUsable を満たす応答が得られたら返す。
+ * すべて失敗したら例外を投げる。
+ */
+async function fetchViaProxy(
+    targetUrl: string,
+    opts: { minLength: number; isUsable?: (body: string) => boolean },
+): Promise<string> {
+    const { minLength, isUsable } = opts;
     let lastError: Error | null = null;
 
     for (const proxyFn of PROXIES) {
         try {
-            const proxyUrl = proxyFn(targetUrl);
-            const res = await fetch(proxyUrl);
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const text = await res.text();
-            if (text.length < 100) throw new Error('Response too short (likely empty)');
+            const text = await fetchOnce(proxyFn(targetUrl), minLength);
+            if (isUsable && !isUsable(text)) {
+                throw new Error('Unusable response (degraded page)');
+            }
             return text;
         } catch (err) {
             lastError = err as Error;
-            console.warn(`[fetchViaProxy] Proxy failed for ${targetUrl}:`, err);
+            console.warn(`[fetchViaProxy] failed for ${targetUrl}:`, err);
         }
     }
 
     throw lastError || new Error('All proxies failed');
 }
 
+// ── HTML 解析 ────────────────────────────────────────────────────────────────
+
 function extractVideoIdFromCanonical(html: string): string | null {
-    // <link rel="canonical" href="https://www.youtube.com/watch?v=VIDEO_ID">
     const m = html.match(/<link rel="canonical" href="https:\/\/www\.youtube\.com\/watch\?v=([a-zA-Z0-9_-]{11})"/);
     return m ? m[1] : null;
 }
@@ -52,64 +82,138 @@ function extractVideoIdFromCanonical(html: string): string | null {
 function checkIsLive(html: string): boolean {
     // 通常ライブ
     if (/"isLiveNow"\s*:\s*true/.test(html)) return true;
-    // 24/7ストリーム（ニュース等）: isLive:true かつ HLSマニフェストあり（予定配信は hlsManifestUrl を持たない）
+    // 24/7ストリーム: isLive:true かつ HLSマニフェストあり（予定配信は持たない）
     if (/"isLive"\s*:\s*true/.test(html) && /"hlsManifestUrl"/.test(html)) return true;
     return false;
 }
 
+/** YouTubeが返す中身のない縮退ページかどうか */
+function isDegradedPage(html: string): boolean {
+    if (/<link rel="canonical" href="undefined">/.test(html)) return true;
+    if (/<title>\s*-\s*YouTube<\/title>/.test(html)) return true;
+    return false;
+}
+
+/** 解析に必要な構造を備えた応答か */
+function isUsableYouTubePage(html: string): boolean {
+    if (isDegradedPage(html)) return false;
+    return html.includes('ytInitialPlayerResponse') || html.includes('rel="canonical"');
+}
+
+function extractChannelId(html: string): string | undefined {
+    const m = html.match(/"channelId"\s*:\s*"(UC[a-zA-Z0-9_-]{22})"/);
+    return m ? m[1] : undefined;
+}
+
+/** YouTubeのHTMLに埋まっているJSON文字列のエスケープを戻す */
+function decodeJsonString(raw: string): string {
+    try {
+        return JSON.parse(`"${raw}"`) as string;
+    } catch {
+        return raw;
+    }
+}
+
+/** チャンネルの表示名。取れなければ undefined（呼び出し側で識別子にフォールバック） */
+function extractChannelName(html: string): string | undefined {
+    const patterns = [
+        /"ownerChannelName"\s*:\s*"([^"]{1,80})"/,
+        /"author"\s*:\s*"([^"]{1,80})"/,
+        /<link itemprop="name" content="([^"]{1,80})">/,
+    ];
+    for (const re of patterns) {
+        const m = html.match(re);
+        if (m && m[1].trim()) return decodeJsonString(m[1]);
+    }
+    return undefined;
+}
+
+// ── 公開API ──────────────────────────────────────────────────────────────────
+
 export type ResolveResult =
     /** 現在ライブ配信中。videoId をそのまま埋め込める */
-    | { status: 'live'; videoId: string }
+    | { status: 'live'; videoId: string; channelId?: string; channelName?: string }
     /** 取得は成功したが配信していない（予定配信・オフライン） */
-    | { status: 'offline' }
-    /** プロキシ失敗などで判定できなかった。現在の表示を維持すべき */
+    | { status: 'offline'; channelId?: string; channelName?: string }
+    /** プロキシ失敗・縮退ページなどで判定できなかった。現在の表示を維持すべき */
     | { status: 'error'; message: string };
 
+/** 識別子から /live ページのURLを組み立てる */
+function livePageUrl(identifier: string): string {
+    if (isYouTubeChannelId(identifier)) {
+        return `https://www.youtube.com/channel/${identifier}/live`;
+    }
+    const handle = identifier.startsWith('@') ? identifier.slice(1) : identifier;
+    return `https://www.youtube.com/@${encodeURIComponent(handle)}/live`;
+}
+
 /**
- * Resolve a YouTube video ID to the channel handle.
- * Uses allorigins proxy (codetabs returns bot-detection page for /watch URLs).
- * @param videoId - 11-char YouTube video ID
- * @returns channel handle without @ (e.g. "tbsnewsdig"), or null if resolution fails
+ * チャンネル識別子（@ハンドル または UCチャンネルID）を現在のライブ video ID に解決する。
+ * この関数は例外を投げない。判定できなかった場合は status: 'error' を返す。
  */
-export async function resolveVideoToChannel(videoId: string): Promise<string | null> {
+export async function resolveYouTubeChannel(identifier: string): Promise<ResolveResult> {
+    let html: string;
     try {
-        const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
-        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(watchUrl)}`;
-        const res = await fetch(proxyUrl);
-        if (!res.ok) return null;
-        const html = await res.text();
-        if (html.length < 1000) return null;
-        const m = html.match(/"canonicalBaseUrl"\s*:\s*"\/@([^"]+)"/);
-        return m ? m[1] : null;
-    } catch {
+        html = await fetchViaProxy(livePageUrl(identifier), {
+            minLength: 1000,
+            isUsable: isUsableYouTubePage,
+        });
+    } catch (err) {
+        console.warn(`[resolveYouTubeChannel] /live fetch failed for ${identifier}:`, err);
+        return { status: 'error', message: err instanceof Error ? err.message : String(err) };
+    }
+
+    const channelId = extractChannelId(html);
+    const channelName = extractChannelName(html);
+    const videoId = extractVideoIdFromCanonical(html);
+
+    if (videoId && checkIsLive(html)) {
+        return { status: 'live', videoId, channelId, channelName };
+    }
+    return { status: 'offline', channelId, channelName };
+}
+
+/** YouTubeの video ID からチャンネルのハンドルと表示名を取得する */
+export async function resolveVideoToChannel(
+    videoId: string,
+): Promise<{ handle: string | null; channelName?: string } | null> {
+    try {
+        const html = await fetchViaProxy(`https://www.youtube.com/watch?v=${videoId}`, {
+            minLength: 1000,
+            isUsable: isUsableYouTubePage,
+        });
+        const m = html.match(/"canonicalBaseUrl"\s*:\s*"\/@([^"]{1,60})"/);
+        return { handle: m ? m[1] : null, channelName: extractChannelName(html) };
+    } catch (err) {
+        console.warn(`[resolveVideoToChannel] failed for ${videoId}:`, err);
         return null;
     }
 }
 
 /**
- * Resolve a YouTube channel handle to a live video ID.
- * この関数は例外を投げない。判定できなかった場合は status: 'error' を返す。
- * @param handle - e.g. "@Popo_Ieiri" or "Popo_Ieiri"
+ * Twitchチャンネルの表示名を取得する。
+ * Twitchはライブ配信のURLが静的なのでライブ判定は不要で、表示名だけを取りに行く。
+ * 取得できなければ null（呼び出し側はログイン名のまま表示する）。
  */
-export async function resolveYouTubeChannel(handle: string): Promise<ResolveResult> {
-    const cleanHandle = handle.startsWith('@') ? handle.slice(1) : handle;
-
-    let html: string;
+export async function resolveTwitchChannelName(login: string): Promise<string | null> {
     try {
-        html = await fetchViaProxy(`https://www.youtube.com/@${cleanHandle}/live`);
+        const html = await fetchViaProxy(`https://www.twitch.tv/${encodeURIComponent(login)}`, {
+            minLength: 500,
+        });
+        const strip = (s: string) => s.replace(/\s*-\s*Twitch\s*$/i, '').trim();
+        const og = html.match(/<meta property="og:title" content="([^"]{1,80})"/);
+        if (og) {
+            const name = strip(og[1]);
+            if (name && name.toLowerCase() !== 'twitch') return name;
+        }
+        const title = html.match(/<title>([^<]{1,80})<\/title>/);
+        if (title) {
+            const name = strip(title[1]);
+            if (name && name.toLowerCase() !== 'twitch') return name;
+        }
+        return null;
     } catch (err) {
-        // プロキシ全滅。オフラインと区別がつかないので error として返す
-        console.warn(`[resolveYouTubeChannel] /live fetch failed:`, err);
-        return { status: 'error', message: err instanceof Error ? err.message : String(err) };
+        console.warn(`[resolveTwitchChannelName] failed for ${login}:`, err);
+        return null;
     }
-
-    // /live ページから canonical の video ID とライブ指標を読む（予定配信は弾かれる）
-    const videoId = extractVideoIdFromCanonical(html);
-    if (videoId && checkIsLive(html)) {
-        console.log(`[resolveYouTubeChannel] ✓ Live: ${videoId}`);
-        return { status: 'live', videoId };
-    }
-
-    console.log(`[resolveYouTubeChannel] Not live (no live indicator or no canonical)`);
-    return { status: 'offline' };
 }

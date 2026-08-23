@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { EyeOff, Eye, Plus, X, Clock, GripVertical, ChevronRight, Star, FolderPlus, Pin, PinOff, ArrowRight, Trash2, RefreshCw } from 'lucide-react';
 import type { Stream, FavoriteNode } from '../types';
+import { toDisplayName } from '../types';
 import type { Locale } from '../i18n';
 import type { HistoryEntry } from '../hooks/useStreamHistory';
 import type { FavoriteActions, FolderInfo } from '../hooks/useFavorites';
@@ -206,7 +207,6 @@ const StreamSidePanel: React.FC<StreamSidePanelProps> = ({
     const favChannelCount = favoriteChannelIds.size;
 
     const label = (ja: string, en: string) => locale === 'ja' ? ja : en;
-    const getDisplayName = (title: string) => title.replace(/^(YouTube|Twitch):\s*/, '');
 
     // ── ルートフォルダ作成のトリガー ──
     const [creatingRootFolder, setCreatingRootFolder] = useState(false);
@@ -242,7 +242,7 @@ const StreamSidePanel: React.FC<StreamSidePanelProps> = ({
                 </button>
                 <PlatformIcon type={stream.type} size={14} />
                 <span className="side-panel-item-title" title={stream.title}>
-                    {getDisplayName(stream.title)}
+                    {toDisplayName(stream)}
                 </span>
                 {/* お気に入り未登録時のみ★ボタンを表示 */}
                 {!isFaved && onAddStreamToFavorites && (
@@ -471,7 +471,7 @@ const StreamSidePanel: React.FC<StreamSidePanelProps> = ({
                                     title={entry.title}
                                     onClick={(e) => handleSelect(entry.historyId, e.ctrlKey || e.metaKey, 'history')}
                                 >
-                                    {getDisplayName(entry.title)}
+                                    {toDisplayName(entry)}
                                 </span>
                                 <button
                                     className="side-panel-toggle-btn"

@@ -10,6 +10,7 @@ export interface HistoryEntry {
     title: string;
     sourceId: string;
     inputType: Stream['inputType'];
+    displayName?: string;
 }
 
 function load(): HistoryEntry[] {
@@ -41,6 +42,7 @@ export function useStreamHistory() {
                 title: stream.title,
                 sourceId: stream.sourceId,
                 inputType: stream.inputType,
+                displayName: stream.displayName,
             };
             const next = [entry, ...filtered].slice(0, MAX_HISTORY);
             save(next);
@@ -68,11 +70,28 @@ export function useStreamHistory() {
         });
     }, []);
 
+    /** 表示名が後から判明したときに履歴側へも反映する */
+    const setDisplayName = useCallback((type: Stream['type'], sourceId: string, displayName: string) => {
+        setHistory(prev => {
+            let changed = false;
+            const next = prev.map(e => {
+                if (e.type === type && e.sourceId === sourceId && e.displayName !== displayName) {
+                    changed = true;
+                    return { ...e, displayName };
+                }
+                return e;
+            });
+            if (!changed) return prev;
+            save(next);
+            return next;
+        });
+    }, []);
+
     const importHistory = useCallback((entries: HistoryEntry[]) => {
         const next = entries.map(e => ({ ...e, historyId: crypto.randomUUID() }));
         save(next);
         setHistory(next);
     }, []);
 
-    return { history, addToHistory, removeFromHistory, reorderHistory, importHistory };
+    return { history, addToHistory, removeFromHistory, reorderHistory, importHistory, setDisplayName };
 }

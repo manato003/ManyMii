@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { MessageSquare, Pin, ChevronDown } from 'lucide-react';
 import type { Stream } from '../types';
+import { toDisplayName } from '../types';
 import type { Locale } from '../i18n';
 import { useHoverPanel } from '../hooks/useHoverPanel';
 
@@ -109,7 +110,7 @@ const ChatSidePanel: React.FC<ChatSidePanelProps> = ({ streams, locale, isPinned
                                 title={label('チャンネルを変更', 'Change channel')}
                             >
                                 <span className={`platform-dot ${selectedStream.type}`} style={{ flexShrink: 0 }} />
-                                <span className="chat-selector-title">{selectedStream.title}</span>
+                                <span className="chat-selector-title">{toDisplayName(selectedStream)}</span>
                                 <ChevronDown size={12} style={{ flexShrink: 0, opacity: 0.6 }} />
                             </button>
                         </div>
@@ -123,7 +124,7 @@ const ChatSidePanel: React.FC<ChatSidePanelProps> = ({ streams, locale, isPinned
                                     onClick={() => handleSelectChannel(s.id)}
                                 >
                                     <span className={`platform-dot ${s.type}`} style={{ flexShrink: 0 }} />
-                                    <span className="chat-selector-title">{s.title}</span>
+                                    <span className="chat-selector-title">{toDisplayName(s)}</span>
                                 </button>
                             ))}
                         </div>

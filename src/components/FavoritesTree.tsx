@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { ChevronRight, Folder, FolderPlus, GripVertical, Plus, X, Check } from 'lucide-react';
 import type { FavoriteNode } from '../types';
+import { toDisplayName } from '../types';
 import type { FavoriteActions } from '../hooks/useFavorites';
 import type { Locale } from '../i18n';
 import { PlatformIcon } from './PlatformIcon';
@@ -10,7 +11,7 @@ interface FavoritesTreeProps {
     depth?: number;
     activeSourceIds: Set<string>;
     actions: FavoriteActions;
-    onAddFromFavorite: (node: { type: 'youtube' | 'twitch'; title: string; sourceId: string; inputType: 'channel' | 'video' | 'url' }) => void;
+    onAddFromFavorite: (node: { type: 'youtube' | 'twitch'; title: string; sourceId: string; inputType: 'channel' | 'video' | 'url'; displayName?: string }) => void;
     locale: Locale;
     // Explorer 風選択
     selectedIds: Set<string>;
@@ -19,7 +20,7 @@ interface FavoritesTreeProps {
     externalDragOverFolderId?: string | null;
 }
 
-const getDisplayName = (title: string) => title.replace(/^(YouTube|Twitch):\s*/, '');
+
 
 const FavoritesTree: React.FC<FavoritesTreeProps> = ({
     nodes, depth = 0, activeSourceIds, actions, onAddFromFavorite, locale,
@@ -293,7 +294,7 @@ const FavoritesTree: React.FC<FavoritesTreeProps> = ({
                             title={node.title}
                             onClick={(e) => onSelect(node.id, e.ctrlKey || e.metaKey)}
                         >
-                            {getDisplayName(node.title)}
+                            {toDisplayName(node)}
                         </span>
                         {isActive ? (
                             <span className="fav-active-check" title={label('追加済', 'Already added')}>
@@ -307,6 +308,7 @@ const FavoritesTree: React.FC<FavoritesTreeProps> = ({
                                     title: node.title,
                                     sourceId: node.sourceId,
                                     inputType: node.inputType,
+                                    displayName: node.displayName,
                                 })}
                                 title={label('配信を追加', 'Add stream')}
                                 aria-label={label('配信を追加', 'Add stream')}

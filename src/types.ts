@@ -7,6 +7,8 @@ export interface Stream {
     hidden?: boolean;
     isLive?: boolean;         // YouTubeチャンネル枠のみ使用。falseならオフライン表示
     channelHandle?: string;   // YouTubeチャンネルの元のハンドル名（再取得に使用）
+    channelId?: string;       // YouTubeのチャンネルID（UC…）。取得できた場合のみ
+    displayName?: string;     // チャンネルの表示名。未取得なら title から導出する
     isResolving?: boolean;    // ライブ状態取得中フラグ（trueの間はローディング表示）
     resolveError?: boolean;   // ライブ状態の取得に失敗した（オフラインとは区別する）
     /**
@@ -35,6 +37,17 @@ export interface FavoriteChannel {
     title: string;
     sourceId: string;
     inputType: 'channel' | 'video' | 'url';
+    displayName?: string;
+}
+
+/**
+ * パネルに出す表示名。
+ * 表示名が取得できていればそれを、なければ title から "YouTube: " 等の接頭辞と
+ * 先頭の @ を取り除いた識別子を返す。
+ */
+export function toDisplayName(item: { title: string; displayName?: string }): string {
+    if (item.displayName) return item.displayName;
+    return item.title.replace(/^(YouTube|Twitch):\s*/, '').replace(/^@/, '');
 }
 
 export type FavoriteNode = FavoriteFolder | FavoriteChannel;

@@ -17,7 +17,7 @@ import { useStreamHistory } from './hooks/useStreamHistory';
 import type { HistoryEntry } from './hooks/useStreamHistory';
 import { useSettings } from './hooks/useSettings';
 import { useFavorites, collectChannelsFromFolder } from './hooks/useFavorites';
-import { resolveYouTubeChannel, resolveVideoToChannel } from './utils/resolveChannelId';
+import { resolveYouTubeChannel, resolveVideoToChannel, resolveTwitchChannelName } from './utils/resolveChannelId';
 
 const HEADER_H = 36;
 const HIDE_THRESHOLD = HEADER_H * 5;
@@ -65,7 +65,7 @@ function App() {
   const [streams, setStreams] = useState<Stream[]>(loadStreams);
   const [headerVisible, setHeaderVisible] = useState(() => settings.headerAlwaysVisible);
   const headerVisibleRef = useRef(settings.headerAlwaysVisible);
-  const { history, addToHistory, removeFromHistory, reorderHistory, importHistory } = useStreamHistory();
+  const { history, addToHistory, removeFromHistory, reorderHistory, importHistory, setDisplayName: setHistoryDisplayName } = useStreamHistory();
   const { tree: favorites, allChannelIds: favoriteChannelIds, getAllFolders: getFavFolders, actions: favoriteActions, importTree } = useFavorites();
 
   useEffect(() => {
@@ -122,21 +122,47 @@ function App() {
    * YouTubeチャンネル枠の video ID をバックグラウンドで解決して反映する。
    * 追加・復元・リロード・定期確認のすべてがこの1本を経由する。
    */
+  /** 表示名が判明したら履歴・お気に入りにも反映する */
+  const propagateDisplayName = useCallback((
+    type: 'youtube' | 'twitch',
+    sourceId: string,
+    displayName: string,
+  ) => {
+    setHistoryDisplayName(type, sourceId, displayName);
+    favoriteActions.setDisplayName(type, sourceId, displayName);
+  }, [setHistoryDisplayName, favoriteActions]);
+
   const resolveStreamInBackground = useCallback(async (streamId: string, handle: string) => {
     const result = await resolveYouTubeChannel(handle);
+
+    if (result.status !== 'error' && result.channelName) {
+      propagateDisplayName('youtube', handle, result.channelName);
+    }
+
     setStreams(prev => prev.map(s => {
       if (s.id !== streamId) return s;
+      const named = result.status === 'error'
+        ? s
+        : { ...s, channelId: result.channelId ?? s.channelId, displayName: result.channelName ?? s.displayName };
       switch (result.status) {
         case 'live':
-          return { ...s, sourceId: result.videoId, inputType: 'video', isLive: true, isResolving: false, resolveError: false };
+          return { ...named, sourceId: result.videoId, inputType: 'video', isLive: true, isResolving: false, resolveError: false };
         case 'offline':
-          return { ...s, sourceId: handle, inputType: 'channel', isLive: false, isResolving: false, resolveError: false };
+          return { ...named, sourceId: handle, inputType: 'channel', isLive: false, isResolving: false, resolveError: false };
         case 'error':
           // 判定できなかっただけなので現在の video ID は維持し、失敗したことだけ記録する
-          return { ...s, isResolving: false, resolveError: true };
+          return { ...named, isResolving: false, resolveError: true };
       }
     }));
-  }, []);
+  }, [propagateDisplayName]);
+
+  /** Twitchはライブ判定が不要なので表示名だけを取りに行く */
+  const resolveTwitchNameInBackground = useCallback(async (streamId: string, login: string) => {
+    const name = await resolveTwitchChannelName(login);
+    if (!name) return;
+    propagateDisplayName('twitch', login, name);
+    setStreams(prev => prev.map(s => s.id === streamId ? { ...s, displayName: name } : s));
+  }, [propagateDisplayName]);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', 'dark');
@@ -225,18 +251,25 @@ function App() {
       return;
     }
 
-    // ── YouTube動画URL: タイトル表示用にチャンネルハンドルを背景で取得 ──
+    // ── Twitch: 表示名だけ背景で取得 ──
+    if (stream.type === 'twitch' && stream.inputType === 'channel') {
+      void resolveTwitchNameInBackground(stream.id, stream.sourceId);
+      return;
+    }
+
+    // ── YouTube動画URL: チャンネルハンドルと表示名を背景で取得 ──
     if (stream.type === 'youtube' && stream.inputType === 'video' && !stream.channelHandle) {
       void resolveVideoToChannel(stream.sourceId)
-        .then(handle => {
-          if (!handle) return;
+        .then(info => {
+          if (!info || !info.handle) return;
+          if (info.channelName) propagateDisplayName('youtube', info.handle, info.channelName);
           setStreams(prev => prev.map(s => s.id === stream.id
-            ? { ...s, title: `YouTube: @${handle}`, channelHandle: handle }
+            ? { ...s, title: `YouTube: @${info.handle}`, channelHandle: info.handle ?? undefined, displayName: info.channelName ?? s.displayName }
             : s));
         })
         .catch(err => console.warn('[App] video handle resolve failed:', err));
     }
-  }, [addToHistory, resolveStreamInBackground]);
+  }, [addToHistory, resolveStreamInBackground, resolveTwitchNameInBackground, propagateDisplayName]);
 
   /**
    * 履歴 / お気に入りから配信を追加する。
@@ -247,9 +280,11 @@ function App() {
     title: string;
     sourceId: string;
     inputType: 'channel' | 'video' | 'url';
+    displayName?: string;
   }) => {
     const streamId = crypto.randomUUID();
     const isYouTubeChannel = src.type === 'youtube' && src.inputType === 'channel';
+    const isTwitchChannel = src.type === 'twitch' && src.inputType === 'channel';
 
     setStreams(prev => [...prev, {
       id: streamId,
@@ -257,12 +292,15 @@ function App() {
       title: src.title,
       sourceId: src.sourceId,
       inputType: src.inputType,
+      displayName: src.displayName,
       domSeq: nextDomSeq(),
       ...(isYouTubeChannel ? { channelHandle: src.sourceId, isResolving: true } : {}),
     }]);
 
     if (isYouTubeChannel) void resolveStreamInBackground(streamId, src.sourceId);
-  }, [resolveStreamInBackground]);
+    // 表示名が未取得の Twitch チャンネルだけ取りに行く
+    else if (isTwitchChannel && !src.displayName) void resolveTwitchNameInBackground(streamId, src.sourceId);
+  }, [resolveStreamInBackground, resolveTwitchNameInBackground]);
 
   const handleAddFromHistory = useCallback(
     (entry: HistoryEntry) => addStreamFromSource(entry),
@@ -271,7 +309,7 @@ function App() {
 
   // ── お気に入りから配信追加 ──
   const handleAddFromFavorite = useCallback(
-    (ch: { type: 'youtube' | 'twitch'; title: string; sourceId: string; inputType: 'channel' | 'video' | 'url' }) =>
+    (ch: { type: 'youtube' | 'twitch'; title: string; sourceId: string; inputType: 'channel' | 'video' | 'url'; displayName?: string }) =>
       addStreamFromSource(ch),
     [addStreamFromSource],
   );
@@ -283,6 +321,7 @@ function App() {
       title: entry.title,
       sourceId: entry.sourceId,
       inputType: entry.inputType,
+      displayName: entry.displayName,
     }, folderId ?? null);
   }, [favoriteActions]);
 
@@ -354,6 +393,7 @@ function App() {
       title: stream.title,
       sourceId: stream.channelHandle ?? stream.sourceId,
       inputType: stream.channelHandle ? 'channel' : stream.inputType,
+      displayName: stream.displayName,
     });
   }, [favoriteActions]);
 

@@ -8,6 +8,11 @@ export interface ParsedStreamInput {
     inputType: 'channel' | 'video' | 'url';
 }
 
+/** YouTubeのチャンネル識別子がチャンネルID（UC…22文字）かどうか */
+export function isYouTubeChannelId(identifier: string): boolean {
+    return /^UC[a-zA-Z0-9_-]{22}$/.test(identifier);
+}
+
 /**
  * Parse Twitch input: URL, channel name, or video ID
  */
@@ -48,6 +53,11 @@ export function parseYouTubeInput(input: string): ParsedStreamInput {
         return { sourceId: handle, title: trimmed, inputType: 'channel' };
     }
 
+    // チャンネルIDの直接入力
+    if (isYouTubeChannelId(trimmed)) {
+        return { sourceId: trimmed, title: trimmed, inputType: 'channel' };
+    }
+
     // YouTube watch URL: https://www.youtube.com/watch?v=VIDEO_ID
     const watchMatch = trimmed.match(/(?:https?:\/\/)?(?:www\.)?youtube\.com\/watch\?.*v=([a-zA-Z0-9_-]{11})/i);
     if (watchMatch) {
@@ -72,12 +82,26 @@ export function parseYouTubeInput(input: string): ParsedStreamInput {
         return { sourceId: embedMatch[1], title: embedMatch[1], inputType: 'video' };
     }
 
-    // YouTube channel URL: https://www.youtube.com/@channelname or /channel/ID
-    const channelMatch = trimmed.match(/(?:https?:\/\/)?(?:www\.)?youtube\.com\/@([a-zA-Z0-9_-]+)/i);
+    // チャンネルID形式: https://www.youtube.com/channel/UCxxxxxxxxxxxxxxxxxxxxxx
+    const channelIdMatch = trimmed.match(/(?:https?:\/\/)?(?:www\.)?youtube\.com\/channel\/(UC[a-zA-Z0-9_-]{22})/i);
+    if (channelIdMatch) {
+        return { sourceId: channelIdMatch[1], title: channelIdMatch[1], inputType: 'channel' };
+    }
+
+    // ハンドル形式: https://www.youtube.com/@channelname
+    // ハンドルにはピリオドや非ASCII文字も使えるため、区切り文字以外をすべて拾う
+    const channelMatch = trimmed.match(/(?:https?:\/\/)?(?:www\.)?youtube\.com\/@([^/?&#\s]+)/i);
     if (channelMatch) {
-        // For channel URLs, we use the channel handle as live embed
-        // YouTube doesn't directly support channel embed, so use /live endpoint  
-        return { sourceId: channelMatch[1], title: `@${channelMatch[1]}`, inputType: 'channel' };
+        const handle = decodeURIComponent(channelMatch[1]);
+        return { sourceId: handle, title: `@${handle}`, inputType: 'channel' };
+    }
+
+    // 旧形式: /c/name, /user/name
+    // これらは解決時に同名ハンドルとして扱う（一致しなければ取得失敗になる）
+    const legacyMatch = trimmed.match(/(?:https?:\/\/)?(?:www\.)?youtube\.com\/(?:c|user)\/([^/?&#\s]+)/i);
+    if (legacyMatch) {
+        const name = decodeURIComponent(legacyMatch[1]);
+        return { sourceId: name, title: `@${name}`, inputType: 'channel' };
     }
 
     // Plain 11-char video ID

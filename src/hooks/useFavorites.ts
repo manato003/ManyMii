@@ -181,6 +181,31 @@ export interface FavoriteActions {
     moveNode: (nodeId: string, targetFolderId: string | null) => void;
     toggleCollapse: (folderId: string) => void;
     reorderInParent: (fromId: string, toId: string) => void;
+    setDisplayName: (type: 'youtube' | 'twitch', sourceId: string, displayName: string) => void;
+}
+
+/** ツリー内の該当チャンネルに表示名を設定する（変化がなければ元の配列を返す） */
+function applyDisplayName(
+    tree: FavoriteNode[],
+    type: 'youtube' | 'twitch',
+    sourceId: string,
+    displayName: string,
+): { tree: FavoriteNode[]; changed: boolean } {
+    let changed = false;
+    const next = tree.map(n => {
+        if (n.kind === 'folder') {
+            const r = applyDisplayName(n.children, type, sourceId, displayName);
+            if (!r.changed) return n;
+            changed = true;
+            return { ...n, children: r.tree };
+        }
+        if (n.type === type && n.sourceId === sourceId && n.displayName !== displayName) {
+            changed = true;
+            return { ...n, displayName };
+        }
+        return n;
+    });
+    return { tree: changed ? next : tree, changed };
 }
 
 // ── フック本体 ──
@@ -271,6 +296,15 @@ export function useFavorites() {
         persist(prev => reorderInTree(prev, fromId, toId));
     }, [persist]);
 
+    /** 表示名が後から判明したときにお気に入り側へも反映する */
+    const setDisplayName = useCallback((
+        type: 'youtube' | 'twitch',
+        sourceId: string,
+        displayName: string,
+    ) => {
+        persist(prev => applyDisplayName(prev, type, sourceId, displayName).tree);
+    }, [persist]);
+
     const allChannelIds = useMemo(() => {
         const ids = new Set<string>();
         collectChannelIds(tree, ids);
@@ -297,8 +331,8 @@ export function useFavorites() {
 
     const actions: FavoriteActions = useMemo(() => ({
         addChannel, removeNode, createFolder, renameFolder,
-        moveNode, toggleCollapse, reorderInParent,
-    }), [addChannel, removeNode, createFolder, renameFolder, moveNode, toggleCollapse, reorderInParent]);
+        moveNode, toggleCollapse, reorderInParent, setDisplayName,
+    }), [addChannel, removeNode, createFolder, renameFolder, moveNode, toggleCollapse, reorderInParent, setDisplayName]);
 
     return { tree, allChannelIds, getAllFolders, actions, importTree };
 }

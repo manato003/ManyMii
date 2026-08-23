@@ -90,13 +90,25 @@ Twitch はチャンネルページの URL がそのまま配信 URL なので、
            （予定配信は hlsManifestUrl を持たないので除外される）
 ```
 
-プロキシは `api.codetabs.com` → `api.allorigins.win` の順にフォールバック。
+プロキシは `api.allorigins.win` → `api.codetabs.com` → `api.cors.lol` の順にフォールバック。
+**1リクエストあたり6秒で打ち切る。** 死んだプロキシは応答までに20秒以上かかることがあり、
+タイムアウトがないと逐次フォールバック全体が固まるため。
+
+チャンネル識別子は `@ハンドル` と `UC…` のチャンネルIDの両方を受け付け、
+それぞれ `/@handle/live` と `/channel/UCxxx/live` を取得する。
+
+### 縮退ページの検出
+
+YouTubeはプロキシ経由のリクエストに対し、**200 を返しながら中身のないページ**
+（`<link rel="canonical" href="undefined">`、`<title> - YouTube</title>`）を
+返すことがある。これをそのまま解析すると canonical が取れず「オフライン」と
+誤判定するため、明示的に検出して `error` として扱う。
 `resolveYouTubeChannel()` は例外を投げず、必ず次のいずれかを返す:
 
 | 戻り値 | 意味 | 画面 |
 |---|---|---|
-| `{ status: 'live', videoId }` | 配信中 | プレイヤー |
-| `{ status: 'offline' }` | 配信していない | オフライン画面 + 再確認ボタン |
+| `{ status: 'live', videoId, channelId?, channelName? }` | 配信中 | プレイヤー |
+| `{ status: 'offline', channelId?, channelName? }` | 配信していない | オフライン画面 + 再確認ボタン |
 | `{ status: 'error', message }` | 判定できなかった | 取得失敗画面 + 再試行ボタン。**現在の video ID は維持** |
 
 **キャッシュしない。** 常に取得しに行く。
@@ -217,3 +229,17 @@ YouTubeチャンネル枠は**解決後の video ID ではなくハンドルを�
   （CSS Grid の `order` で DOM 位置を変えずに入れ替える案が未実装）
 - Twitch にはオフライン判定がない（Twitch 側の埋め込みがオフライン表示を出す）
 - マウス操作前提。タッチ操作には対応しない
+
+## 11. 表示名
+
+パネル・枠ヘッダー・コメントセレクターの表示は `toDisplayName()`（`types.ts`）を通す。
+`displayName` があればそれを、なければ `title` から `YouTube: ` などの接頭辞と
+先頭の `@` を取り除いた識別子を表示する。
+
+| 種別 | 取得元 | 追加リクエスト |
+|---|---|---|
+| YouTube | `/live` / watch ページの `"ownerChannelName"` → `"author"` の順 | なし（ライブ解決と同じ応答から抽出） |
+| Twitch | `twitch.tv/<login>` の `og:title` | あり（表示名のためだけに1回） |
+
+判明した表示名は `Stream` だけでなく、同じ `type` + `sourceId` を持つ履歴・お気に入りにも
+反映される（`propagateDisplayName`）。取得できなければ従来どおり識別子を表示する。

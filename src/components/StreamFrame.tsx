@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, ExternalLink, RefreshCw, GripVertical, EyeOff, Loader, WifiOff, AlertTriangle } from 'lucide-react';
 import type { Stream } from '../types';
+import { toDisplayName } from '../types';
 import TwitchPlayer from './TwitchPlayer';
 import YouTubePlayer from './YouTubePlayer';
 import { t } from '../i18n';
@@ -87,7 +88,7 @@ const StreamFrame: React.FC<StreamFrameProps> = React.memo(({
                         <GripVertical size={14} />
                     </div>
                     <span className={`platform-dot ${stream.type}`}></span>
-                    <span className="stream-title-text" title={stream.title}>{stream.title}</span>
+                    <span className="stream-title-text" title={stream.title}>{toDisplayName(stream)}</span>
                 </div>
                 <div className="stream-frame-actions">
                     <button className="stream-frame-action" onClick={e => { e.stopPropagation(); onHide(stream.id); }} title={locale === 'ja' ? '非表示' : 'Hide'} aria-label={locale === 'ja' ? '非表示' : 'Hide'}>
@@ -109,7 +110,7 @@ const StreamFrame: React.FC<StreamFrameProps> = React.memo(({
                 {stream.isResolving ? (
                     <div className="stream-offline">
                         <Loader size={28} className="spin" />
-                        <span className="stream-offline-title">{stream.title}</span>
+                        <span className="stream-offline-title">{toDisplayName(stream)}</span>
                         <span className="stream-offline-msg">
                             {locale === 'ja' ? 'ライブ確認中...' : 'Checking live status...'}
                         </span>
@@ -117,7 +118,7 @@ const StreamFrame: React.FC<StreamFrameProps> = React.memo(({
                 ) : stream.resolveError && stream.isLive !== true ? (
                     <div className="stream-offline">
                         <AlertTriangle size={28} />
-                        <span className="stream-offline-title">{stream.title}</span>
+                        <span className="stream-offline-title">{toDisplayName(stream)}</span>
                         <span className="stream-offline-msg">
                             {locale === 'ja' ? 'ライブ状態を取得できませんでした' : 'Could not check live status'}
                         </span>
@@ -129,7 +130,7 @@ const StreamFrame: React.FC<StreamFrameProps> = React.memo(({
                 ) : stream.type === 'youtube' && stream.isLive === false ? (
                     <div className="stream-offline">
                         <WifiOff size={28} />
-                        <span className="stream-offline-title">{stream.title}</span>
+                        <span className="stream-offline-title">{toDisplayName(stream)}</span>
                         <span className="stream-offline-msg">
                             {locale === 'ja' ? '現在ライブ配信していません' : 'Not currently live'}
                         </span>

@@ -22,8 +22,25 @@ import { resolveYouTubeChannel, resolveVideoToChannel } from './utils/resolveCha
 const HEADER_H = 36;
 const HIDE_THRESHOLD = HEADER_H * 5;
 
+const STREAMS_KEY = 'activeStreams';
+
+/** localStorage から配信リストを復元する（他のフックと同じ遅延初期化パターン） */
+function loadStreams(): Stream[] {
+  try {
+    const raw = localStorage.getItem(STREAMS_KEY);
+    if (!raw) return [];
+    // isResolving は実行時フラグ。旧バージョンが true のまま保存している場合の救済
+    return (JSON.parse(raw) as Stream[]).map(s => ({ ...s, isResolving: false }));
+  } catch (e) {
+    console.error(e);
+    return [];
+  }
+}
+
 function App() {
-  const [locale, setLocale] = useState<Locale>('ja');
+  const [locale, setLocale] = useState<Locale>(
+    () => (localStorage.getItem('locale') as Locale | null) ?? 'ja',
+  );
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
@@ -31,17 +48,16 @@ function App() {
   const [isChatPinned, setIsChatPinned] = useState(() => localStorage.getItem('chatPinned') === 'true');
   const [isStreamPinned, setIsStreamPinned] = useState(() => localStorage.getItem('streamPinned') === 'true');
   const [settings, updateSetting] = useSettings();
-  const [streams, setStreams] = useState<Stream[]>([]);
+  const [streams, setStreams] = useState<Stream[]>(loadStreams);
   const [headerVisible, setHeaderVisible] = useState(() => settings.headerAlwaysVisible);
   const headerVisibleRef = useRef(settings.headerAlwaysVisible);
   const { history, addToHistory, removeFromHistory, reorderHistory, importHistory } = useStreamHistory();
   const { tree: favorites, allChannelIds: favoriteChannelIds, getAllFolders: getFavFolders, actions: favoriteActions, importTree } = useFavorites();
 
   useEffect(() => {
-    // 常時表示モードのときはリスナー不要
+    // 常時表示モードのときはリスナー不要（表示状態は描画時に導出する）
     if (settings.headerAlwaysVisible) {
       headerVisibleRef.current = true;
-      setHeaderVisible(true);
       return;
     }
 
@@ -88,19 +104,41 @@ function App() {
     setHeaderVisible(true);
   }, []);
 
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', 'dark');
-    const savedLocale = localStorage.getItem('locale') as Locale | null;
-    if (savedLocale) setLocale(savedLocale);
-    const savedStreams = localStorage.getItem('activeStreams');
-    if (savedStreams) {
-      try {
-        // 旧バージョンが isResolving: true を保存している可能性があるため必ず落とす
-        const parsed = JSON.parse(savedStreams) as Stream[];
-        setStreams(parsed.map(s => ({ ...s, isResolving: false })));
-      } catch (e) { console.error(e); }
+  /**
+   * YouTubeチャンネル枠の video ID をバックグラウンドで解決して反映する。
+   * 追加・復元・リロード・定期確認のすべてがこの1本を経由する。
+   */
+  const resolveStreamInBackground = useCallback(async (streamId: string, handle: string) => {
+    try {
+      const { videoId, isLive } = await resolveYouTubeChannel(handle);
+      setStreams(prev => prev.map(s => s.id === streamId ? {
+        ...s,
+        sourceId: isLive ? videoId : handle,
+        inputType: isLive ? 'video' : 'channel',
+        isLive,
+        isResolving: false,
+      } : s));
+    } catch (err) {
+      // 取得できなかった場合は現在の video ID を維持する（無駄なリロードをしない）
+      console.warn(`[App] resolve failed for ${handle}:`, err);
+      setStreams(prev => prev.map(s => s.id === streamId ? { ...s, isResolving: false } : s));
     }
   }, []);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', 'dark');
+  }, []);
+
+  // 起動時: 復元した YouTubeチャンネル枠の video ID を再取得する。
+  // スピナーは出さず、解決できたら差し替える（前回の枠がすぐ再生される）
+  const didStartupRefresh = useRef(false);
+  useEffect(() => {
+    if (didStartupRefresh.current) return;
+    didStartupRefresh.current = true;
+    streams.forEach(s => {
+      if (s.channelHandle) void resolveStreamInBackground(s.id, s.channelHandle);
+    });
+  }, [streams, resolveStreamInBackground]);
 
   useEffect(() => {
     // isResolving は実行時のみのフラグ。保存してしまうと解決中にタブを閉じた枠が
@@ -110,7 +148,7 @@ function App() {
       delete copy.isResolving;
       return copy;
     });
-    localStorage.setItem('activeStreams', JSON.stringify(persisted));
+    localStorage.setItem(STREAMS_KEY, JSON.stringify(persisted));
   }, [streams]);
 
   useEffect(() => {
@@ -127,137 +165,65 @@ function App() {
     localStorage.setItem('locale', next);
   }, [locale]);
 
-  /** YouTube チャンネル枠の video ID をバックグラウンドで解決して反映する */
-  const resolveStreamInBackground = useCallback(async (streamId: string, handle: string) => {
-    try {
-      const { videoId, isLive } = await resolveYouTubeChannel(handle);
-      setStreams(prev => prev.map(s => s.id === streamId ? {
-        ...s,
-        sourceId: isLive ? videoId : handle,
-        inputType: isLive ? 'video' : 'channel',
-        isLive,
-        isResolving: false,
-      } : s));
-    } catch (err) {
-      console.warn(`[App] resolve failed for ${handle}:`, err);
-      setStreams(prev => prev.map(s => s.id === streamId ? { ...s, isResolving: false } : s));
-    }
-  }, []);
-
-  const handleAddStream = async (stream: Stream) => {
+  const handleAddStream = useCallback((stream: Stream) => {
     setStreams(prev => [...prev, stream]);
     addToHistory(stream);
 
-    // ── YouTube channel: resolve live video ID in background ────────────
+    // ── YouTubeチャンネル: ライブ中の video ID を背景で解決 ──
     if (stream.type === 'youtube' && stream.inputType === 'channel' && stream.channelHandle) {
-      try {
-        const { videoId, isLive } = await resolveYouTubeChannel(stream.channelHandle);
-        setStreams(prev => prev.map(s => s.id === stream.id ? {
-          ...s,
-          sourceId: isLive ? videoId : stream.channelHandle!,
-          inputType: isLive ? 'video' : 'channel',
-          isLive,
-          isResolving: false,
-        } : s));
-      } catch (err) {
-        console.warn('[App] handleAddStream channel resolve failed:', err);
-        setStreams(prev => prev.map(s => s.id === stream.id ? { ...s, isResolving: false } : s));
-      }
+      void resolveStreamInBackground(stream.id, stream.channelHandle);
       return;
     }
 
-    // ── YouTube video URL: resolve channel handle in background (title update) ──
+    // ── YouTube動画URL: タイトル表示用にチャンネルハンドルを背景で取得 ──
     if (stream.type === 'youtube' && stream.inputType === 'video' && !stream.channelHandle) {
-      try {
-        const handle = await resolveVideoToChannel(stream.sourceId);
-        if (handle) {
-          setStreams(prev => prev.map(s => s.id === stream.id ? {
-            ...s,
-            title: `YouTube: @${handle}`,
-            channelHandle: handle,
-          } : s));
-        }
-      } catch (err) {
-        console.warn('[App] handleAddStream video handle resolve failed:', err);
-      }
+      void resolveVideoToChannel(stream.sourceId)
+        .then(handle => {
+          if (!handle) return;
+          setStreams(prev => prev.map(s => s.id === stream.id
+            ? { ...s, title: `YouTube: @${handle}`, channelHandle: handle }
+            : s));
+        })
+        .catch(err => console.warn('[App] video handle resolve failed:', err));
     }
-  };
+  }, [addToHistory, resolveStreamInBackground]);
 
-  const handleAddFromHistory = useCallback(async (entry: HistoryEntry) => {
+  /**
+   * 履歴 / お気に入りから配信を追加する。
+   * YouTubeチャンネルは即座にローディング枠を出し、video ID は背景で解決する。
+   */
+  const addStreamFromSource = useCallback((src: {
+    type: 'youtube' | 'twitch';
+    title: string;
+    sourceId: string;
+    inputType: 'channel' | 'video' | 'url';
+  }) => {
     const streamId = crypto.randomUUID();
+    const isYouTubeChannel = src.type === 'youtube' && src.inputType === 'channel';
 
-    if (entry.type === 'youtube' && entry.inputType === 'channel') {
-      // 即時追加（ローディング状態）→ バックグラウンドで解決
-      setStreams(prev => [...prev, {
-        id: streamId,
-        type: 'youtube',
-        title: entry.title,
-        sourceId: entry.sourceId,
-        inputType: 'channel',
-        channelHandle: entry.sourceId,
-        isResolving: true,
-      }]);
-      try {
-        const result = await resolveYouTubeChannel(entry.sourceId);
-        setStreams(prev => prev.map(s => s.id === streamId ? {
-          ...s,
-          sourceId: result.isLive ? result.videoId : entry.sourceId,
-          inputType: result.isLive ? 'video' : 'channel',
-          isLive: result.isLive,
-          isResolving: false,
-        } : s));
-      } catch (err) {
-        console.warn('[App] history add resolve failed:', err);
-        setStreams(prev => prev.map(s => s.id === streamId ? { ...s, isResolving: false } : s));
-      }
-    } else {
-      setStreams(prev => [...prev, {
-        id: streamId,
-        type: entry.type,
-        title: entry.title,
-        sourceId: entry.sourceId,
-        inputType: entry.inputType,
-      }]);
-    }
-  }, []);
+    setStreams(prev => [...prev, {
+      id: streamId,
+      type: src.type,
+      title: src.title,
+      sourceId: src.sourceId,
+      inputType: src.inputType,
+      ...(isYouTubeChannel ? { channelHandle: src.sourceId, isResolving: true } : {}),
+    }]);
+
+    if (isYouTubeChannel) void resolveStreamInBackground(streamId, src.sourceId);
+  }, [resolveStreamInBackground]);
+
+  const handleAddFromHistory = useCallback(
+    (entry: HistoryEntry) => addStreamFromSource(entry),
+    [addStreamFromSource],
+  );
 
   // ── お気に入りから配信追加 ──
-  const handleAddFromFavorite = useCallback(async (ch: { type: 'youtube' | 'twitch'; title: string; sourceId: string; inputType: 'channel' | 'video' | 'url' }) => {
-    const streamId = crypto.randomUUID();
-
-    if (ch.type === 'youtube' && ch.inputType === 'channel') {
-      setStreams(prev => [...prev, {
-        id: streamId,
-        type: 'youtube',
-        title: ch.title,
-        sourceId: ch.sourceId,
-        inputType: 'channel',
-        channelHandle: ch.sourceId,
-        isResolving: true,
-      }]);
-      try {
-        const result = await resolveYouTubeChannel(ch.sourceId);
-        setStreams(prev => prev.map(s => s.id === streamId ? {
-          ...s,
-          sourceId: result.isLive ? result.videoId : ch.sourceId,
-          inputType: result.isLive ? 'video' : 'channel',
-          isLive: result.isLive,
-          isResolving: false,
-        } : s));
-      } catch (err) {
-        console.warn('[App] favorite add resolve failed:', err);
-        setStreams(prev => prev.map(s => s.id === streamId ? { ...s, isResolving: false } : s));
-      }
-    } else {
-      setStreams(prev => [...prev, {
-        id: streamId,
-        type: ch.type,
-        title: ch.title,
-        sourceId: ch.sourceId,
-        inputType: ch.inputType,
-      }]);
-    }
-  }, []);
+  const handleAddFromFavorite = useCallback(
+    (ch: { type: 'youtube' | 'twitch'; title: string; sourceId: string; inputType: 'channel' | 'video' | 'url' }) =>
+      addStreamFromSource(ch),
+    [addStreamFromSource],
+  );
 
   // ── 履歴からお気に入りに追加（フォルダ指定可） ──
   const handleAddToFavorites = useCallback((entry: HistoryEntry, folderId?: string | null) => {
@@ -313,31 +279,7 @@ function App() {
     ));
   }, []);
 
-  // 起動時：全YouTubeチャンネル枠のvideo IDをバックグラウンドで再取得
-  useEffect(() => {
-    const refreshAll = async () => {
-      setStreams(prev => {
-        const youtubeChannels = prev.filter(s => s.type === 'youtube' && s.channelHandle);
-        if (youtubeChannels.length === 0) return prev;
-        youtubeChannels.forEach(async (stream) => {
-          try {
-            const handle = stream.channelHandle!;
-            const { videoId, isLive } = await resolveYouTubeChannel(handle);
-            setStreams(cur => cur.map(s =>
-              s.id === stream.id
-                ? { ...s, sourceId: isLive ? videoId : handle, inputType: isLive ? 'video' : 'channel', isLive }
-                : s
-            ));
-          } catch (err) {
-            console.warn(`[App] startup refresh failed for ${stream.channelHandle}:`, err);
-          }
-        });
-        return prev;
-      });
-    };
-    refreshAll();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+
 
   // ── Share modal handlers ──
   // 共有コードから復元した YouTube チャンネル枠は video ID が未解決なので、
@@ -388,12 +330,15 @@ function App() {
 
   const visibleStreams = useMemo(() => streams.filter(s => !s.hidden), [streams]);
 
+  // 常時表示設定のときは state に依存せず必ず表示する
+  const isHeaderVisible = settings.headerAlwaysVisible || headerVisible;
+
   return (
     <div className="app-root" style={{ '--chat-width': `${settings.chatWidth}px` } as React.CSSProperties}>
       <div className="header-trigger" onMouseEnter={showHeader} />
 
       <header
-        className={`app-header ${headerVisible ? 'visible' : ''}`}
+        className={`app-header ${isHeaderVisible ? 'visible' : ''}`}
         onMouseEnter={showHeader}
       >
         {/* Left: title (クリックでリロード) */}

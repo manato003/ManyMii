@@ -140,6 +140,22 @@ const StreamGrid: React.FC<StreamGridProps> = ({ streams, setStreams, locale, on
         [streams.length, vpSize]
     );
 
+    /**
+     * DOM上の並び順は domSeq（追加順）で固定し、視覚的な位置は CSS の order で表現する。
+     *
+     * streams 配列の順序をそのまま DOM に反映すると、並べ替えのたびに React が
+     * キー付き子要素を insertBefore で physically 移動させ、移動したすべての
+     * iframe がブラウザによってリロードされる。
+     * （9枠で1枠目を9枠目にドロップすると、Reactの再配置アルゴリズムの性質上
+     *   最後尾に来た1つを除く8枠が移動＝リロードされていた）
+     */
+    const domOrdered = useMemo(
+        () => streams
+            .map((stream, visualIndex) => ({ stream, visualIndex }))
+            .sort((a, b) => (a.stream.domSeq ?? a.visualIndex) - (b.stream.domSeq ?? b.visualIndex)),
+        [streams],
+    );
+
     // ── Render ───────────────────────────────────────────────────────────────
     if (streams.length === 0) {
         const isSwapped = panelLayout === 'swapped';
@@ -207,11 +223,12 @@ const StreamGrid: React.FC<StreamGridProps> = ({ streams, setStreams, locale, on
                     gap: '3px',
                 }}
             >
-                {streams.map(stream => (
+                {domOrdered.map(({ stream, visualIndex }) => (
                     <div
                         key={stream.id}
                         className={`stream-grid-cell${dragOverId === stream.id && draggingId !== stream.id ? ' drag-over' : ''}`}
                         data-stream-id={stream.id}
+                        style={{ order: visualIndex }}
                     >
                         <StreamFrame
                             key={stream.id}

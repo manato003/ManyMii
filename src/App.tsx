@@ -27,13 +27,24 @@ const STREAMS_KEY = 'activeStreams';
 /** オフライン枠のライブ状態を自動再確認する間隔 */
 const AUTO_REFRESH_MS = 5 * 60 * 1000;
 
+// グリッドのDOM順序を固定するための通し番号。単調増加させるだけでよい
+let domSeqCounter = 0;
+const nextDomSeq = () => ++domSeqCounter;
+
 /** localStorage から配信リストを復元する（他のフックと同じ遅延初期化パターン） */
 function loadStreams(): Stream[] {
   try {
     const raw = localStorage.getItem(STREAMS_KEY);
     if (!raw) return [];
     // isResolving は実行時フラグ。旧バージョンが true のまま保存している場合の救済
-    return (JSON.parse(raw) as Stream[]).map(s => ({ ...s, isResolving: false }));
+    // domSeq は永続化していないので、復元時に配列順で振り直す
+    const list = (JSON.parse(raw) as Stream[]).map((s, i) => ({
+      ...s,
+      isResolving: false,
+      domSeq: i + 1,
+    }));
+    domSeqCounter = list.length;
+    return list;
   } catch (e) {
     console.error(e);
     return [];
@@ -184,6 +195,7 @@ function App() {
     const persisted = streams.map(s => {
       const copy: Stream = { ...s };
       delete copy.isResolving;
+      delete copy.domSeq;
       return copy;
     });
     localStorage.setItem(STREAMS_KEY, JSON.stringify(persisted));
@@ -204,7 +216,7 @@ function App() {
   }, [locale]);
 
   const handleAddStream = useCallback((stream: Stream) => {
-    setStreams(prev => [...prev, stream]);
+    setStreams(prev => [...prev, { ...stream, domSeq: nextDomSeq() }]);
     addToHistory(stream);
 
     // ── YouTubeチャンネル: ライブ中の video ID を背景で解決 ──
@@ -245,6 +257,7 @@ function App() {
       title: src.title,
       sourceId: src.sourceId,
       inputType: src.inputType,
+      domSeq: nextDomSeq(),
       ...(isYouTubeChannel ? { channelHandle: src.sourceId, isResolving: true } : {}),
     }]);
 
@@ -321,11 +334,12 @@ function App() {
   // 共有コードから復元した YouTube チャンネル枠は video ID が未解決なので、
   // 反映と同時にバックグラウンドで解決する（そのまま埋め込むと再生エラーになる）
   const handleApplyStreams = useCallback((newStreams: Stream[]) => {
-    const prepared = newStreams.map(s =>
+    const prepared = newStreams.map((s, i) =>
       s.type === 'youtube' && s.inputType === 'channel'
-        ? { ...s, channelHandle: s.channelHandle ?? s.sourceId, isResolving: true }
-        : s
+        ? { ...s, channelHandle: s.channelHandle ?? s.sourceId, isResolving: true, domSeq: i + 1 }
+        : { ...s, domSeq: i + 1 }
     );
+    domSeqCounter = prepared.length;
     setStreams(prepared);
     prepared.forEach(s => {
       if (s.isResolving && s.channelHandle) resolveStreamInBackground(s.id, s.channelHandle);

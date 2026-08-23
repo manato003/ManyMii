@@ -9,6 +9,7 @@ export interface Stream {
     isLive?: boolean;         // YouTubeチャンネル枠のみ使用。falseならオフライン表示
     channelHandle?: string;   // YouTubeチャンネルの元のハンドル名（再取得に使用）
     isResolving?: boolean;    // ライブ状態取得中フラグ（trueの間はローディング表示）
+    resolveError?: boolean;   // ライブ状態の取得に失敗した（オフラインとは区別する）
 }
 
 // ── お気に入りツリー ──

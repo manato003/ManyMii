@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
-import { X, ExternalLink, RefreshCw, GripVertical, EyeOff, Loader, WifiOff } from 'lucide-react';
+import { X, ExternalLink, RefreshCw, GripVertical, EyeOff, Loader, WifiOff, AlertTriangle } from 'lucide-react';
 import type { Stream } from '../types';
 import TwitchPlayer from './TwitchPlayer';
 import YouTubePlayer from './YouTubePlayer';
 import { t } from '../i18n';
 import type { Locale } from '../i18n';
-import { resolveYouTubeChannel } from '../utils/resolveChannelId';
 
 interface StreamFrameProps {
     stream: Stream;
@@ -19,13 +18,13 @@ interface StreamFrameProps {
     isDragging: boolean;
     isDragTarget: boolean;
     onHide: (id: string) => void;
-    onUpdateSourceId: (id: string, newSourceId: string, isLive: boolean) => void;
+    onRefreshStream: (id: string, handle: string) => Promise<void>;
 }
 
 const StreamFrame: React.FC<StreamFrameProps> = React.memo(({
     stream, onRemove, isArchiveMode, globalTime, locale,
     isExpanded, onToggleExpand, onDragHandleMouseDown,
-    isDragging, isDragTarget, onHide, onUpdateSourceId,
+    isDragging, isDragTarget, onHide, onRefreshStream,
 }) => {
     const [isHovered, setIsHovered] = useState(false);
     const [reloadKey, setReloadKey] = useState(0);
@@ -53,16 +52,13 @@ const StreamFrame: React.FC<StreamFrameProps> = React.memo(({
 
     const handleReload = async (e: React.MouseEvent) => {
         e.stopPropagation(); e.preventDefault();
-        // YouTubeチャンネル枠はvideo IDを再取得してから切り替え
-        if (stream.type === 'youtube' && stream.inputType === 'channel') {
+        // YouTubeチャンネル由来の枠は video ID を再取得してから切り替える。
+        // ライブ中は inputType が 'video' になっているため channelHandle の有無で判定する。
+        if (stream.type === 'youtube' && stream.channelHandle) {
             setIsResolving(true);
             try {
-                const { videoId, isLive } = await resolveYouTubeChannel(stream.channelHandle ?? stream.sourceId);
-                onUpdateSourceId(stream.id, videoId, isLive);
+                await onRefreshStream(stream.id, stream.channelHandle);
                 setReloadKey(k => k + 1);
-            } catch (err) {
-                console.warn('[StreamFrame] reload resolve failed, keeping current stream:', err);
-                // 失敗時は何もしない（古いvideo IDのまま維持）
             } finally {
                 setIsResolving(false);
             }
@@ -121,6 +117,18 @@ const StreamFrame: React.FC<StreamFrameProps> = React.memo(({
                             {locale === 'ja' ? 'ライブ確認中...' : 'Checking live status...'}
                         </span>
                     </div>
+                ) : stream.resolveError && stream.isLive !== true ? (
+                    <div className="stream-offline">
+                        <AlertTriangle size={28} />
+                        <span className="stream-offline-title">{stream.title}</span>
+                        <span className="stream-offline-msg">
+                            {locale === 'ja' ? 'ライブ状態を取得できませんでした' : 'Could not check live status'}
+                        </span>
+                        <button className="stream-offline-retry" onClick={handleReload} disabled={isResolving}>
+                            {isResolving ? <Loader size={12} className="spin" /> : <RefreshCw size={12} />}
+                            <span>{locale === 'ja' ? '再試行' : 'Retry'}</span>
+                        </button>
+                    </div>
                 ) : stream.type === 'youtube' && stream.isLive === false ? (
                     <div className="stream-offline">
                         <WifiOff size={28} />
@@ -128,6 +136,10 @@ const StreamFrame: React.FC<StreamFrameProps> = React.memo(({
                         <span className="stream-offline-msg">
                             {locale === 'ja' ? '現在ライブ配信していません' : 'Not currently live'}
                         </span>
+                        <button className="stream-offline-retry" onClick={handleReload} disabled={isResolving}>
+                            {isResolving ? <Loader size={12} className="spin" /> : <RefreshCw size={12} />}
+                            <span>{locale === 'ja' ? '再確認' : 'Check again'}</span>
+                        </button>
                     </div>
                 ) : stream.type === 'twitch' ? (
                     <TwitchPlayer

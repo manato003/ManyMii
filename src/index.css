@@ -1017,3 +1017,29 @@ body {
   font-size: 0.75rem;
   color: var(--text-secondary);
 }
+
+.stream-offline-retry {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 2px;
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.stream-offline-retry:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.stream-offline-retry:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

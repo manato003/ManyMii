@@ -9,7 +9,10 @@
  *      - "isLive":true + hlsManifestUrl → 24/7 streams (e.g. news channels)
  *      - hlsManifestUrl alone not checked: only present when actively streaming,
  *        so it guards against scheduled streams that have isLive:true but haven't started
- *   4. Not live → return isLive: false (show offline screen, no fallback to videos)
+ *   4. Not live → status: 'offline'（オフライン画面を表示。最新動画へのフォールバックはしない）
+ *   5. プロキシが全滅した場合は status: 'error'。
+ *      「オフライン」と同じ扱いにすると、実際は配信中でも取得に失敗しただけで
+ *      「配信していません」と表示されてしまうため、必ず区別する。
  *
  * No API key or backend required.
  * Always fetches fresh data (no localStorage caching).
@@ -54,11 +57,13 @@ function checkIsLive(html: string): boolean {
     return false;
 }
 
-export interface ResolveResult {
-    videoId: string;
-    /** true = currently live, false = offline */
-    isLive: boolean;
-}
+export type ResolveResult =
+    /** 現在ライブ配信中。videoId をそのまま埋め込める */
+    | { status: 'live'; videoId: string }
+    /** 取得は成功したが配信していない（予定配信・オフライン） */
+    | { status: 'offline' }
+    /** プロキシ失敗などで判定できなかった。現在の表示を維持すべき */
+    | { status: 'error'; message: string };
 
 /**
  * Resolve a YouTube video ID to the channel handle.
@@ -83,28 +88,28 @@ export async function resolveVideoToChannel(videoId: string): Promise<string | n
 
 /**
  * Resolve a YouTube channel handle to a live video ID.
+ * この関数は例外を投げない。判定できなかった場合は status: 'error' を返す。
  * @param handle - e.g. "@Popo_Ieiri" or "Popo_Ieiri"
  */
 export async function resolveYouTubeChannel(handle: string): Promise<ResolveResult> {
     const cleanHandle = handle.startsWith('@') ? handle.slice(1) : handle;
 
-    // Step 1: try /live page — accept if live indicators detected (rejects scheduled streams)
+    let html: string;
     try {
-        const liveUrl = `https://www.youtube.com/@${cleanHandle}/live`;
-        const html = await fetchViaProxy(liveUrl);
-        const videoId = extractVideoIdFromCanonical(html);
-        const isLive = checkIsLive(html);
-        if (videoId && isLive) {
-            console.log(`[resolveYouTubeChannel] ✓ Live: ${videoId}`);
-            return { videoId, isLive: true };
-        }
-        // ライブ中でない（予定配信 or オフライン）
-        console.log(`[resolveYouTubeChannel] Not live (no live indicator or no canonical)`);
-        return { videoId: '', isLive: false };
+        html = await fetchViaProxy(`https://www.youtube.com/@${cleanHandle}/live`);
     } catch (err) {
+        // プロキシ全滅。オフラインと区別がつかないので error として返す
         console.warn(`[resolveYouTubeChannel] /live fetch failed:`, err);
+        return { status: 'error', message: err instanceof Error ? err.message : String(err) };
     }
 
-    // プロキシ失敗時もオフライン扱い
-    return { videoId: '', isLive: false };
+    // /live ページから canonical の video ID とライブ指標を読む（予定配信は弾かれる）
+    const videoId = extractVideoIdFromCanonical(html);
+    if (videoId && checkIsLive(html)) {
+        console.log(`[resolveYouTubeChannel] ✓ Live: ${videoId}`);
+        return { status: 'live', videoId };
+    }
+
+    console.log(`[resolveYouTubeChannel] Not live (no live indicator or no canonical)`);
+    return { status: 'offline' };
 }

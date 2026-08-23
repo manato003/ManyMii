@@ -109,20 +109,19 @@ function App() {
    * 追加・復元・リロード・定期確認のすべてがこの1本を経由する。
    */
   const resolveStreamInBackground = useCallback(async (streamId: string, handle: string) => {
-    try {
-      const { videoId, isLive } = await resolveYouTubeChannel(handle);
-      setStreams(prev => prev.map(s => s.id === streamId ? {
-        ...s,
-        sourceId: isLive ? videoId : handle,
-        inputType: isLive ? 'video' : 'channel',
-        isLive,
-        isResolving: false,
-      } : s));
-    } catch (err) {
-      // 取得できなかった場合は現在の video ID を維持する（無駄なリロードをしない）
-      console.warn(`[App] resolve failed for ${handle}:`, err);
-      setStreams(prev => prev.map(s => s.id === streamId ? { ...s, isResolving: false } : s));
-    }
+    const result = await resolveYouTubeChannel(handle);
+    setStreams(prev => prev.map(s => {
+      if (s.id !== streamId) return s;
+      switch (result.status) {
+        case 'live':
+          return { ...s, sourceId: result.videoId, inputType: 'video', isLive: true, isResolving: false, resolveError: false };
+        case 'offline':
+          return { ...s, sourceId: handle, inputType: 'channel', isLive: false, isResolving: false, resolveError: false };
+        case 'error':
+          // 判定できなかっただけなので現在の video ID は維持し、失敗したことだけ記録する
+          return { ...s, isResolving: false, resolveError: true };
+      }
+    }));
   }, []);
 
   useEffect(() => {
@@ -271,13 +270,11 @@ function App() {
     setStreams(prev => prev.filter(s => s.id !== id));
   }, []);
 
-  const handleUpdateSourceId = useCallback((id: string, newSourceId: string, isLive: boolean) => {
-    setStreams(prev => prev.map(s =>
-      s.id === id
-        ? { ...s, sourceId: isLive ? newSourceId : s.channelHandle ?? s.sourceId, inputType: isLive ? 'video' : 'channel', isLive }
-        : s
-    ));
-  }, []);
+  /** 個別枠のリロードボタンから呼ばれる再解決 */
+  const handleRefreshStream = useCallback(
+    (id: string, handle: string) => resolveStreamInBackground(id, handle),
+    [resolveStreamInBackground],
+  );
 
 
 
@@ -412,7 +409,7 @@ function App() {
           globalTime={0}
           locale={locale}
           onHide={handleToggleHidden}
-          onUpdateSourceId={handleUpdateSourceId}
+          onRefreshStream={handleRefreshStream}
           panelLayout={settings.panelLayout}
         />
         <ChatSidePanel

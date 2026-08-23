@@ -11,7 +11,7 @@ interface StreamGridProps {
     globalTime: number;
     locale: Locale;
     onHide: (id: string) => void;
-    onUpdateSourceId: (id: string, newSourceId: string, isLive: boolean) => void;
+    onRefreshStream: (id: string, handle: string) => Promise<void>;
     panelLayout?: 'default' | 'swapped';
 }
 
@@ -36,7 +36,7 @@ function calcOptimalGrid(count: number, vpW: number, vpH: number) {
     return { cols: bestCols, rows: Math.ceil(count / bestCols) };
 }
 
-const StreamGrid: React.FC<StreamGridProps> = ({ streams, setStreams, isArchiveMode, globalTime, locale, onHide, onUpdateSourceId, panelLayout }) => {
+const StreamGrid: React.FC<StreamGridProps> = ({ streams, setStreams, isArchiveMode, globalTime, locale, onHide, onRefreshStream, panelLayout }) => {
     const [expandedId, setExpandedId] = useState<string | null>(null);
     const [draggingId, setDraggingId] = useState<string | null>(null);
     const [dragOverId, setDragOverId] = useState<string | null>(null);
@@ -188,7 +188,7 @@ const StreamGrid: React.FC<StreamGridProps> = ({ streams, setStreams, isArchiveM
                             isDragging={false}
                             isDragTarget={false}
                             onHide={onHide}
-                            onUpdateSourceId={onUpdateSourceId}
+                            onRefreshStream={onRefreshStream}
                         />
                     </div>
                 </div>
@@ -231,7 +231,7 @@ const StreamGrid: React.FC<StreamGridProps> = ({ streams, setStreams, isArchiveM
                             isDragging={draggingId === stream.id}
                             isDragTarget={dragOverId === stream.id && draggingId !== stream.id}
                             onHide={onHide}
-                            onUpdateSourceId={onUpdateSourceId}
+                            onRefreshStream={onRefreshStream}
                         />
                     </div>
                 ))}

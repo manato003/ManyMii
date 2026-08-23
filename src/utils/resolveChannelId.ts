@@ -145,7 +145,7 @@ export type ResolveResult =
  * r.jina.ai はJSを実行したうえでHTMLを返すため、ytInitialData ごと取得できる。
  * 1リクエストでライブID・チャンネル名・チャンネルIDがすべて揃う。
  */
-const RENDER_TIMEOUT_MS = 15000;
+const RENDER_TIMEOUT_MS = 25000;
 
 function channelPageUrl(identifier: string): string {
     if (isYouTubeChannelId(identifier)) {
@@ -157,7 +157,9 @@ function channelPageUrl(identifier: string): string {
 
 async function fetchRenderedPage(targetUrl: string): Promise<string> {
     const res = await fetch(`https://r.jina.ai/${targetUrl}`, {
-        headers: { 'X-Return-Format': 'html' },
+        // X-Timeout はレンダリング待ちの上限（秒）。これがないと描画前のHTMLが返ることがあり、
+        // TwitchのようなSPAでは <title> が "Twitch" のままになる
+        headers: { 'X-Return-Format': 'html', 'X-Timeout': '20' },
         signal: AbortSignal.timeout(RENDER_TIMEOUT_MS),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);

@@ -119,8 +119,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, locale, settings
                             </span>
                             <span className="settings-description">
                                 {label(
-                                    'ライブ中でない枠だけ5分ごとに確認（タブ非表示中は停止）',
-                                    'Checks only non-live streams every 5 min (paused when tab is hidden)',
+                                    '5分ごとに確認。1件あたり1〜2.7MB取得するため既定はOFF',
+                                    'Every 5 min. Off by default: each check downloads 1-2.7MB',
                                 )}
                             </span>
                         </div>

@@ -127,6 +127,23 @@ function App() {
     localStorage.setItem('locale', next);
   }, [locale]);
 
+  /** YouTube チャンネル枠の video ID をバックグラウンドで解決して反映する */
+  const resolveStreamInBackground = useCallback(async (streamId: string, handle: string) => {
+    try {
+      const { videoId, isLive } = await resolveYouTubeChannel(handle);
+      setStreams(prev => prev.map(s => s.id === streamId ? {
+        ...s,
+        sourceId: isLive ? videoId : handle,
+        inputType: isLive ? 'video' : 'channel',
+        isLive,
+        isResolving: false,
+      } : s));
+    } catch (err) {
+      console.warn(`[App] resolve failed for ${handle}:`, err);
+      setStreams(prev => prev.map(s => s.id === streamId ? { ...s, isResolving: false } : s));
+    }
+  }, []);
+
   const handleAddStream = async (stream: Stream) => {
     setStreams(prev => [...prev, stream]);
     addToHistory(stream);
@@ -323,9 +340,19 @@ function App() {
   }, []);
 
   // ── Share modal handlers ──
+  // 共有コードから復元した YouTube チャンネル枠は video ID が未解決なので、
+  // 反映と同時にバックグラウンドで解決する（そのまま埋め込むと再生エラーになる）
   const handleApplyStreams = useCallback((newStreams: Stream[]) => {
-    setStreams(newStreams);
-  }, []);
+    const prepared = newStreams.map(s =>
+      s.type === 'youtube' && s.inputType === 'channel'
+        ? { ...s, channelHandle: s.channelHandle ?? s.sourceId, isResolving: true }
+        : s
+    );
+    setStreams(prepared);
+    prepared.forEach(s => {
+      if (s.isResolving && s.channelHandle) resolveStreamInBackground(s.id, s.channelHandle);
+    });
+  }, [resolveStreamInBackground]);
 
   // ── Active stream → お気に入り追加 ──
   // YouTube live中はsourceIdがvideo IDになっているため、channelHandleを優先する

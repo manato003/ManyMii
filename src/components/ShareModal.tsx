@@ -7,7 +7,7 @@ import type { HistoryEntry } from '../hooks/useStreamHistory';
 
 // ── v2 share format ──────────────────────────────────────────────────────────
 
-type StreamExport = Pick<Stream, 'type' | 'title' | 'sourceId' | 'inputType' | 'startTime'>;
+type StreamExport = Pick<Stream, 'type' | 'title' | 'sourceId' | 'inputType' | 'startTime' | 'channelHandle'>;
 
 interface ShareDataV2 {
     v: 2;
@@ -67,11 +67,14 @@ const ShareModal: React.FC<ShareModalProps> = ({
     const exportCode = useMemo(() => {
         const data: ShareDataV2 = { v: 2 };
         if (includeStreams && streams.length > 0) {
+            // YouTubeチャンネル枠は解決後の video ID ではなくハンドルを書き出す。
+            // video ID を固定すると、その配信が終わった時点でコードが使い物にならなくなるため。
             data.streams = streams.map(s => ({
                 type: s.type,
                 title: s.title,
-                sourceId: s.sourceId,
-                inputType: s.inputType,
+                sourceId: s.channelHandle ?? s.sourceId,
+                inputType: s.channelHandle ? 'channel' as const : s.inputType,
+                channelHandle: s.channelHandle,
                 startTime: s.startTime,
             }));
         }

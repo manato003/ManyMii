@@ -31,25 +31,42 @@ function normalizeHandle(h: string | undefined): string {
     return h.startsWith('@') ? h.slice(1) : h;
 }
 
+/**
+ * 共有コードをデコードする。
+ * v1 = 配信の配列そのもの / v2 = { v: 2, streams?, favorites?, history? }
+ * まとめて追加欄では streams セクションのみを取り込む。
+ */
 function tryDecodeShareCode(code: string): Omit<Stream, 'id'>[] | null {
     try {
         const decoded = JSON.parse(decodeURIComponent(atob(code.trim())));
-        if (Array.isArray(decoded) && decoded.every((s: unknown) =>
-            typeof s === 'object' && s !== null && 'type' in s && 'sourceId' in s
-        )) {
-            return decoded as Omit<Stream, 'id'>[];
+
+        let list: unknown[] | null = null;
+        if (Array.isArray(decoded)) {
+            list = decoded;                                  // v1
+        } else if (decoded && decoded.v === 2) {
+            list = Array.isArray(decoded.streams) ? decoded.streams : [];  // v2（配信なしなら空）
         }
-        return null;
+        if (!list) return null;
+
+        const isStream = (s: unknown) =>
+            typeof s === 'object' && s !== null && 'type' in s && 'sourceId' in s;
+        if (!list.every(isStream)) return null;
+
+        return list as Omit<Stream, 'id'>[];
     } catch { return null; }
 }
 
 function buildStream(type: 'twitch' | 'youtube', parsed: ReturnType<typeof parseTwitchInput>): Stream {
+    // YouTubeチャンネルは channelHandle を持たせないと App 側の解決処理に入らず、
+    // ハンドルのまま live_stream 埋め込みに渡されて再生エラーになる
+    const isYouTubeChannel = type === 'youtube' && parsed.inputType === 'channel';
     return {
         id: crypto.randomUUID(),
         type,
         title: `${type === 'youtube' ? 'YouTube' : 'Twitch'}: ${parsed.title}`,
         sourceId: parsed.sourceId,
         inputType: parsed.inputType,
+        ...(isYouTubeChannel ? { channelHandle: parsed.sourceId, isResolving: true } : {}),
     };
 }
 
@@ -126,13 +143,29 @@ const AddStreamModal: React.FC<AddStreamModalProps> = ({ onClose, onAdd, locale,
         const raw = bulkInput.trim();
         if (!raw) return;
 
+        // 重複判定キー: YouTubeチャンネルはハンドル、それ以外は sourceId
+        const keyOf = (s: { type: string; sourceId: string; channelHandle?: string }) =>
+            `${s.type}:${s.channelHandle ?? s.sourceId}`;
+        const seen = new Set(addedStreams.map(keyOf));
+
+        const tryAdd = (stream: Stream): boolean => {
+            const key = keyOf(stream);
+            if (seen.has(key)) return false;   // 単発追加と同様に重複を弾く
+            seen.add(key);
+            onAdd(stream);
+            return true;
+        };
+
         // Single line with no newlines → try share code decode first
         if (!raw.includes('\n')) {
             const shareStreams = tryDecodeShareCode(raw);
             if (shareStreams) {
-                shareStreams.forEach(s => onAdd({ ...s, id: crypto.randomUUID() }));
+                let sok = 0, sfail = 0;
+                shareStreams.forEach(s => {
+                    if (tryAdd({ ...s, id: crypto.randomUUID() })) sok++; else sfail++;
+                });
                 setBulkInput('');
-                setBulkResults({ ok: shareStreams.length, fail: 0 });
+                setBulkResults({ ok: sok, fail: sfail });
                 setTimeout(() => setBulkResults(null), 3000);
                 return;
             }
@@ -143,12 +176,8 @@ const AddStreamModal: React.FC<AddStreamModalProps> = ({ onClose, onAdd, locale,
         let ok = 0, fail = 0;
         lines.forEach(line => {
             const detected = detectPlatformFromUrl(line);
-            if (detected) {
-                onAdd(buildStream(detected.type, detected.parsed));
-                ok++;
-            } else {
-                fail++;
-            }
+            if (!detected) { fail++; return; }
+            if (tryAdd(buildStream(detected.type, detected.parsed))) ok++; else fail++;
         });
         setBulkResults({ ok, fail });
         setBulkInput('');

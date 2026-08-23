@@ -81,8 +81,31 @@ interface Stream {
 YouTube はライブ配信の URL が動的なため、ハンドルから現在の配信を特定する必要がある。
 Twitch はチャンネルページの URL がそのまま配信 URL なので、この処理は不要。
 
+### 経路1（本命）: レンダリング済みチャンネルページ
+
 ```
-@handle → CORSプロキシ経由で youtube.com/@handle/live を取得
+@handle → r.jina.ai 経由で youtube.com/@handle を取得（X-Return-Format: html）
+        → ytInitialData 内の "channelFeaturedContentRenderer" を探す
+        → その中に THUMBNAIL_OVERLAY_BADGE_STYLE_LIVE があれば配信中
+        → 直後の "animationActivationTargetId" が video ID
+        → og:title = チャンネル表示名、"externalId" = チャンネルID
+```
+
+**素のCORSプロキシではこれができない。** YouTubeはデータセンターIPからの
+リクエストに対し、200 を返しながら中身のないページ（canonical が "undefined"、
+ytInitialData なし）を返す。r.jina.ai はJSを実行したうえでHTMLを返すため
+ytInitialData ごと取得できる。CORSプリフライトにも対応している。
+
+1リクエストで**ライブID・チャンネル名・チャンネルIDがすべて揃う**。
+実測 1.0〜2.1秒、応答サイズ 1.2〜2.7MB。
+
+配信していないチャンネルは注目コンテンツにライブ枠が出ないため、
+`channelFeaturedContentRenderer` がない、またはLIVEバッジがない = オフライン。
+
+### 経路2（フォールバック）: /live ページ
+
+```
+@handle → 素のCORSプロキシ経由で youtube.com/@handle/live を取得
         → <link rel="canonical"> から video ID を抽出
         → ライブ判定:
              "isLiveNow": true                        → 通常のライブ
@@ -90,7 +113,9 @@ Twitch はチャンネルページの URL がそのまま配信 URL なので、
            （予定配信は hlsManifestUrl を持たないので除外される）
 ```
 
-プロキシは `api.allorigins.win` → `api.codetabs.com` → `api.cors.lol` の順にフォールバック。
+成功率は低いが、経路1がレート制限などで使えないときの保険として残している。
+
+経路2のプロキシは `api.allorigins.win` → `api.codetabs.com` → `api.cors.lol` の順。
 **1リクエストあたり6秒で打ち切る。** 死んだプロキシは応答までに20秒以上かかることがあり、
 タイムアウトがないと逐次フォールバック全体が固まるため。
 
@@ -238,8 +263,8 @@ YouTubeチャンネル枠は**解決後の video ID ではなくハンドルを�
 
 | 種別 | 取得元 | 追加リクエスト |
 |---|---|---|
-| YouTube | `/live` / watch ページの `"ownerChannelName"` → `"author"` の順 | なし（ライブ解決と同じ応答から抽出） |
-| Twitch | `twitch.tv/<login>` の `og:title` | あり（表示名のためだけに1回） |
+| YouTube | チャンネルページの `og:title`（経路2では `"ownerChannelName"` → `"author"`） | なし（ライブ解決と同じ応答から抽出） |
+| Twitch | `twitch.tv/<login>` の `og:title`（r.jina.ai → 素のプロキシの順） | あり（表示名のためだけに1回） |
 
 判明した表示名は `Stream` だけでなく、同じ `type` + `sourceId` を持つ履歴・お気に入りにも
 反映される（`propagateDisplayName`）。取得できなければ従来どおり識別子を表示する。

@@ -138,6 +138,71 @@ export type ResolveResult =
     /** プロキシ失敗・縮退ページなどで判定できなかった。現在の表示を維持すべき */
     | { status: 'error'; message: string };
 
+/**
+ * レンダリング済みチャンネルページの取得（本命の経路）。
+ *
+ * YouTubeは素のプロキシからの /live 取得に対して中身のない縮退ページを返すが、
+ * r.jina.ai はJSを実行したうえでHTMLを返すため、ytInitialData ごと取得できる。
+ * 1リクエストでライブID・チャンネル名・チャンネルIDがすべて揃う。
+ */
+const RENDER_TIMEOUT_MS = 15000;
+
+function channelPageUrl(identifier: string): string {
+    if (isYouTubeChannelId(identifier)) {
+        return `https://www.youtube.com/channel/${identifier}`;
+    }
+    const handle = identifier.startsWith('@') ? identifier.slice(1) : identifier;
+    return `https://www.youtube.com/@${encodeURIComponent(handle)}`;
+}
+
+async function fetchRenderedPage(targetUrl: string): Promise<string> {
+    const res = await fetch(`https://r.jina.ai/${targetUrl}`, {
+        headers: { 'X-Return-Format': 'html' },
+        signal: AbortSignal.timeout(RENDER_TIMEOUT_MS),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.text();
+}
+
+export interface ChannelPageInfo {
+    /** 配信中なら video ID、そうでなければ null */
+    videoId: string | null;
+    channelName?: string;
+    channelId?: string;
+}
+
+/**
+ * チャンネルページからライブ配信を抽出する。
+ *
+ * 配信中のチャンネルは「注目コンテンツ」(channelFeaturedContentRenderer) に
+ * ライブ枠が入り、その中のバッジが THUMBNAIL_OVERLAY_BADGE_STYLE_LIVE になる。
+ * video ID はバッジ直後の animationActivationTargetId から取れる。
+ */
+export function parseChannelPage(html: string): ChannelPageInfo {
+    const channelName = (html.match(/<meta property="og:title" content="([^"]{1,80})"/) || [])[1];
+    const channelId = (html.match(/"externalId"\s*:\s*"(UC[a-zA-Z0-9_-]{22})"/) || [])[1];
+    const base: ChannelPageInfo = { videoId: null, channelName, channelId };
+
+    const featIdx = html.indexOf('"channelFeaturedContentRenderer"');
+    if (featIdx === -1) return base; // 注目コンテンツなし = 配信していない
+
+    const section = html.slice(featIdx, featIdx + 20000);
+    const badgeIdx = section.indexOf('THUMBNAIL_OVERLAY_BADGE_STYLE_LIVE');
+    if (badgeIdx === -1) return base; // 注目コンテンツはあるがライブではない
+
+    // バッジ直後の animationActivationTargetId が配信中の video ID
+    const byTarget = section
+        .slice(badgeIdx, badgeIdx + 400)
+        .match(/"animationActivationTargetId"\s*:\s*"([a-zA-Z0-9_-]{11})"/);
+    if (byTarget) return { ...base, videoId: byTarget[1] };
+
+    // フォールバック: 注目セクション内のサムネイルURLから拾う
+    const byThumb = section.slice(0, badgeIdx).match(/i\.ytimg\.com\/vi\/([a-zA-Z0-9_-]{11})\//);
+    if (byThumb) return { ...base, videoId: byThumb[1] };
+
+    return base;
+}
+
 /** 識別子から /live ページのURLを組み立てる */
 function livePageUrl(identifier: string): string {
     if (isYouTubeChannelId(identifier)) {
@@ -152,25 +217,37 @@ function livePageUrl(identifier: string): string {
  * この関数は例外を投げない。判定できなかった場合は status: 'error' を返す。
  */
 export async function resolveYouTubeChannel(identifier: string): Promise<ResolveResult> {
-    let html: string;
+    // ── 経路1（本命）: レンダリング済みチャンネルページ ──
     try {
-        html = await fetchViaProxy(livePageUrl(identifier), {
+        const html = await fetchRenderedPage(channelPageUrl(identifier));
+        if (!html.includes('ytInitialData')) throw new Error('No ytInitialData (degraded page)');
+        const info = parseChannelPage(html);
+        return info.videoId
+            ? { status: 'live', videoId: info.videoId, channelId: info.channelId, channelName: info.channelName }
+            : { status: 'offline', channelId: info.channelId, channelName: info.channelName };
+    } catch (err) {
+        console.warn(`[resolveYouTubeChannel] rendered channel page failed for ${identifier}:`, err);
+    }
+
+    // ── 経路2（フォールバック）: /live ページを素のプロキシで取得 ──
+    // YouTubeが縮退ページを返すことが多く成功率は低いが、経路1が
+    // レート制限などで使えないときの保険として残す
+    try {
+        const html = await fetchViaProxy(livePageUrl(identifier), {
             minLength: 1000,
             isUsable: isUsableYouTubePage,
         });
+        const channelId = extractChannelId(html);
+        const channelName = extractChannelName(html);
+        const videoId = extractVideoIdFromCanonical(html);
+        if (videoId && checkIsLive(html)) {
+            return { status: 'live', videoId, channelId, channelName };
+        }
+        return { status: 'offline', channelId, channelName };
     } catch (err) {
-        console.warn(`[resolveYouTubeChannel] /live fetch failed for ${identifier}:`, err);
+        console.warn(`[resolveYouTubeChannel] /live fallback failed for ${identifier}:`, err);
         return { status: 'error', message: err instanceof Error ? err.message : String(err) };
     }
-
-    const channelId = extractChannelId(html);
-    const channelName = extractChannelName(html);
-    const videoId = extractVideoIdFromCanonical(html);
-
-    if (videoId && checkIsLive(html)) {
-        return { status: 'live', videoId, channelId, channelName };
-    }
-    return { status: 'offline', channelId, channelName };
 }
 
 /** YouTubeの video ID からチャンネルのハンドルと表示名を取得する */
@@ -196,10 +273,14 @@ export async function resolveVideoToChannel(
  * 取得できなければ null（呼び出し側はログイン名のまま表示する）。
  */
 export async function resolveTwitchChannelName(login: string): Promise<string | null> {
+    const url = `https://www.twitch.tv/${encodeURIComponent(login)}`;
     try {
-        const html = await fetchViaProxy(`https://www.twitch.tv/${encodeURIComponent(login)}`, {
-            minLength: 500,
-        });
+        let html: string;
+        try {
+            html = await fetchRenderedPage(url);
+        } catch {
+            html = await fetchViaProxy(url, { minLength: 500 });
+        }
         const strip = (s: string) => s.replace(/\s*-\s*Twitch\s*$/i, '').trim();
         const og = html.match(/<meta property="og:title" content="([^"]{1,80})"/);
         if (og) {

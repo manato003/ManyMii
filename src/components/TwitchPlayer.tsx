@@ -3,18 +3,14 @@ import React from 'react';
 interface TwitchPlayerProps {
     channel?: string;
     video?: string;
-    time?: number;
 }
 
-const TwitchPlayer: React.FC<TwitchPlayerProps> = React.memo(({ channel, video, time }) => {
+const TwitchPlayer: React.FC<TwitchPlayerProps> = React.memo(({ channel, video }) => {
     const parentParam = window.location.hostname;
 
     let src = '';
     if (video) {
         src = `https://player.twitch.tv/?video=v${video}&parent=${parentParam}&autoplay=true`;
-        if (time !== undefined && time > 0) {
-            src += `&time=${Math.floor(time)}s`;
-        }
     } else if (channel) {
         src = `https://player.twitch.tv/?channel=${channel}&parent=${parentParam}&autoplay=true&muted=true`;
     }
@@ -26,6 +22,7 @@ const TwitchPlayer: React.FC<TwitchPlayerProps> = React.memo(({ channel, video, 
     return (
         <iframe
             src={src}
+            title={`Twitch: ${channel ?? video}`}
             frameBorder="0"
             allowFullScreen
             scrolling="no"

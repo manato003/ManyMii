@@ -7,8 +7,6 @@ import { t } from '../i18n';
 interface StreamGridProps {
     streams: Stream[];
     setStreams: React.Dispatch<React.SetStateAction<Stream[]>>;
-    isArchiveMode: boolean;
-    globalTime: number;
     locale: Locale;
     onHide: (id: string) => void;
     onRefreshStream: (id: string, handle: string) => Promise<void>;
@@ -36,7 +34,7 @@ function calcOptimalGrid(count: number, vpW: number, vpH: number) {
     return { cols: bestCols, rows: Math.ceil(count / bestCols) };
 }
 
-const StreamGrid: React.FC<StreamGridProps> = ({ streams, setStreams, isArchiveMode, globalTime, locale, onHide, onRefreshStream, panelLayout }) => {
+const StreamGrid: React.FC<StreamGridProps> = ({ streams, setStreams, locale, onHide, onRefreshStream, panelLayout }) => {
     const [expandedId, setExpandedId] = useState<string | null>(null);
     const [draggingId, setDraggingId] = useState<string | null>(null);
     const [dragOverId, setDragOverId] = useState<string | null>(null);
@@ -179,10 +177,7 @@ const StreamGrid: React.FC<StreamGridProps> = ({ streams, setStreams, isArchiveM
                             key={expanded.id}
                             stream={expanded}
                             onRemove={removeStream}
-                            isArchiveMode={isArchiveMode}
-                            globalTime={globalTime}
                             locale={locale}
-                            isExpanded={true}
                             onToggleExpand={toggleExpand}
                             onDragHandleMouseDown={handleDragHandleMouseDown}
                             isDragging={false}
@@ -222,10 +217,7 @@ const StreamGrid: React.FC<StreamGridProps> = ({ streams, setStreams, isArchiveM
                             key={stream.id}
                             stream={stream}
                             onRemove={removeStream}
-                            isArchiveMode={isArchiveMode}
-                            globalTime={globalTime}
                             locale={locale}
-                            isExpanded={false}
                             onToggleExpand={toggleExpand}
                             onDragHandleMouseDown={handleDragHandleMouseDown}
                             isDragging={draggingId === stream.id}

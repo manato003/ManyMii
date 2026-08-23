@@ -7,7 +7,7 @@ import type { HistoryEntry } from '../hooks/useStreamHistory';
 
 // ── v2 share format ──────────────────────────────────────────────────────────
 
-type StreamExport = Pick<Stream, 'type' | 'title' | 'sourceId' | 'inputType' | 'startTime' | 'channelHandle'>;
+type StreamExport = Pick<Stream, 'type' | 'title' | 'sourceId' | 'inputType' | 'channelHandle'>;
 
 interface ShareDataV2 {
     v: 2;
@@ -75,7 +75,6 @@ const ShareModal: React.FC<ShareModalProps> = ({
                 sourceId: s.channelHandle ?? s.sourceId,
                 inputType: s.channelHandle ? 'channel' as const : s.inputType,
                 channelHandle: s.channelHandle,
-                startTime: s.startTime,
             }));
         }
         if (includeFavorites && favorites.length > 0) {

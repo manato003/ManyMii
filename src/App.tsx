@@ -405,8 +405,6 @@ function App() {
         <StreamGrid
           streams={visibleStreams}
           setStreams={setStreams}
-          isArchiveMode={false}
-          globalTime={0}
           locale={locale}
           onHide={handleToggleHidden}
           onRefreshStream={handleRefreshStream}

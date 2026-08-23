@@ -9,10 +9,7 @@ import type { Locale } from '../i18n';
 interface StreamFrameProps {
     stream: Stream;
     onRemove: (id: string) => void;
-    isArchiveMode: boolean;
-    globalTime: number;
     locale: Locale;
-    isExpanded: boolean;
     onToggleExpand: (id: string) => void;
     onDragHandleMouseDown: (e: React.MouseEvent, id: string) => void;
     isDragging: boolean;
@@ -22,8 +19,8 @@ interface StreamFrameProps {
 }
 
 const StreamFrame: React.FC<StreamFrameProps> = React.memo(({
-    stream, onRemove, isArchiveMode, globalTime, locale,
-    isExpanded, onToggleExpand, onDragHandleMouseDown,
+    stream, onRemove, locale,
+    onToggleExpand, onDragHandleMouseDown,
     isDragging, isDragTarget, onHide, onRefreshStream,
 }) => {
     const [isHovered, setIsHovered] = useState(false);
@@ -146,14 +143,12 @@ const StreamFrame: React.FC<StreamFrameProps> = React.memo(({
                         key={reloadKey}
                         channel={stream.inputType === 'channel' ? stream.sourceId : undefined}
                         video={stream.inputType === 'video' ? stream.sourceId : undefined}
-                        time={isArchiveMode && stream.startTime !== undefined ? globalTime - stream.startTime : undefined}
                     />
                 ) : (
                     <YouTubePlayer
                         key={reloadKey}
                         videoId={stream.sourceId}
                         isChannel={stream.inputType === 'channel'}
-                        time={isArchiveMode && stream.startTime !== undefined ? globalTime - stream.startTime : undefined}
                     />
                 )}
             </div>

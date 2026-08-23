@@ -1,73 +1,70 @@
-# React + TypeScript + Vite
+# Multistream Nexus
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+YouTube と Twitch の**ライブ配信を複数同時に視聴する**ための Web アプリ。
 
-Currently, two official plugins are available:
+配信を追加するとアスペクト比 16:9 を保ったまま画面いっぱいに敷き詰められ、
+UI は普段隠れているので視聴領域が最大化されます。
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+**公開URL: https://multistream-app-eta.vercel.app**
 
-## React Compiler
+---
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## できること
 
-## Expanding the ESLint configuration
+| | |
+|---|---|
+| 配信の追加 | URL / `@ハンドル` / チャンネル名を貼るだけでプラットフォームを自動判別。複数行の一括追加にも対応 |
+| YouTubeライブの自動解決 | `@ハンドル` から現在配信中の動画を自動で特定（バックエンド・APIキー不要） |
+| 自動グリッド | 枠数と画面サイズから黒余白が最小になる配置を自動計算 |
+| 並べ替え・拡大 | ハンドルのドラッグで入れ替え、ダブルクリックで全画面拡大 |
+| お気に入り | フォルダ分け（2階層）して管理。フォルダ単位でまとめて追加 |
+| 履歴 | 追加した配信を自動記録（最大50件） |
+| コメント欄 | 画面右端にホバーでチャットを表示。ピン留めで常時表示 |
+| レイアウト共有 | 現在の構成を共有コードとして書き出し／読み込み |
+| 日本語 / 英語 | ヘッダーの言語ボタンで切替 |
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## 基本操作
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+画面の端にマウスを近づけると、それぞれの UI が現れます。
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```
+        ┌──────── 上端: ヘッダー（追加・共有・ヘルプ・言語・設定）
+        │
+左端 ───┤                                    ├─── 右端
+配信管理 │           配信グリッド             │  コメント
+        └────────────────────────────────────┘
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+| 操作 | 動作 |
+|---|---|
+| 配信枠をダブルクリック | 全画面拡大 / 復帰 |
+| ハンドル `⋮⋮` をドラッグ | 配信枠・履歴・お気に入りの並べ替え |
+| `A` | 配信を追加 |
+| `,` | 設定 |
+| `?` | ヘルプ |
+| `P` | コメントパネルのピン留め切替 |
+| `Esc` | モーダルを閉じる |
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+※ マウス操作前提の設計です（PC専用）。
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## 開発
+
+```bash
+npm install
+npm run dev      # http://localhost:5173/
+npm run build    # tsc -b && vite build
+npm run lint
 ```
+
+技術スタック: React 19 / TypeScript / Vite。依存は `lucide-react` のみで、
+バックエンドもデータベースもありません。
+
+## ドキュメント
+
+| ファイル | 内容 |
+|---|---|
+| [CLAUDE.md](CLAUDE.md) | 設計思想と作業ルール（AI・人間共通の前提） |
+| [docs/SPEC.md](docs/SPEC.md) | 実装仕様の詳細 |
+| [tasks/todo.md](tasks/todo.md) | 未実装の課題 |
+| [tasks/lessons.md](tasks/lessons.md) | このプロジェクト固有のバグ・修正パターン |
+| [layouts/](layouts/) | 保存しておいた共有コード |

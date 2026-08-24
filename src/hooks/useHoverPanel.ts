@@ -14,7 +14,7 @@ interface UseHoverPanelOptions {
  * - isPinned=true のとき常時表示、hide 系の処理をスキップ
  */
 export function useHoverPanel({ hideDelay = 500, idleTimeout = 5000, isPinned = false }: UseHoverPanelOptions = {}) {
-    const [visible, setVisible] = useState(isPinned);
+    const [visible, setVisible] = useState(false);
     const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -25,13 +25,14 @@ export function useHoverPanel({ hideDelay = 500, idleTimeout = 5000, isPinned = 
         if (idleTimerRef.current) { clearTimeout(idleTimerRef.current); idleTimerRef.current = null; }
     };
 
-    // isPinned が変わったとき visible を同期
+    // ピン留め中は state に関係なく表示する（描画時に導出し、effect で setState しない）
+    const isVisible = visible || isPinned;
+
+    // ピン留めされたら予約済みの非表示処理を取り消す
     useEffect(() => {
-        if (isPinned) {
-            clearHideTimer();
-            clearIdleTimer();
-            setVisible(true);
-        }
+        if (!isPinned) return;
+        clearHideTimer();
+        clearIdleTimer();
     }, [isPinned]);
 
     const show = useCallback(() => {
@@ -58,7 +59,7 @@ export function useHoverPanel({ hideDelay = 500, idleTimeout = 5000, isPinned = 
     // マウスが idleTimeout ms 静止したら自動非表示（ピン留め時はスキップ）
     useEffect(() => {
         if (isPinned) return;
-        if (!visible) {
+        if (!isVisible) {
             clearIdleTimer();
             return;
         }
@@ -72,7 +73,7 @@ export function useHoverPanel({ hideDelay = 500, idleTimeout = 5000, isPinned = 
             window.removeEventListener('mousemove', resetIdle);
             clearIdleTimer();
         };
-    }, [visible, idleTimeout, isPinned]);
+    }, [isVisible, idleTimeout, isPinned]);
 
-    return { visible, show, scheduleHide };
+    return { visible: isVisible, show, scheduleHide };
 }

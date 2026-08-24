@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { MessageSquare, Pin, ChevronDown } from 'lucide-react';
 import type { Stream } from '../types';
 import { toDisplayName } from '../types';
@@ -38,7 +38,8 @@ const ChatSidePanel: React.FC<ChatSidePanelProps> = ({ streams, locale, isPinned
 
     const label = (ja: string, en: string) => locale === 'ja' ? ja : en;
 
-    const isVisible = visible || isPinned;
+    // useHoverPanel がピン留めを織り込んだ値を返す
+    const isVisible = visible;
 
     // ── チャット表示可能なストリームのみ絞り込む ───────────────────────────
     const chatStreams = useMemo(
@@ -46,22 +47,10 @@ const ChatSidePanel: React.FC<ChatSidePanelProps> = ({ streams, locale, isPinned
         [streams],
     );
 
-    // 選択中のストリームが削除されたら選択解除
-    useEffect(() => {
-        if (selectedId && !chatStreams.find(s => s.id === selectedId)) {
-            setSelectedId(null);
-            setIsSelectorExpanded(false);
-        }
-    }, [chatStreams, selectedId]);
-
-    // パネルが表示されたとき、未選択なら先頭を自動選択
-    useEffect(() => {
-        if (isVisible && selectedId === null && chatStreams.length > 0) {
-            setSelectedId(chatStreams[0].id);
-        }
-    }, [isVisible, chatStreams, selectedId]);
-
-    const selectedStream = chatStreams.find(s => s.id === selectedId) ?? null;
+    // selectedId は「ユーザーが明示的に選んだもの」だけを保持する。
+    // 未選択のときや選択中の配信が消えたときの解決は描画時に行う
+    // （effect で setState するとレンダーのカスケードになる）。
+    const selectedStream = chatStreams.find(s => s.id === selectedId) ?? chatStreams[0] ?? null;
     const chatUrl = selectedStream ? getChatUrl(selectedStream) : null;
 
     const handleSelectChannel = (id: string) => {

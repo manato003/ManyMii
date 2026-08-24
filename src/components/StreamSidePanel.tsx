@@ -110,7 +110,7 @@ const StreamSidePanel: React.FC<StreamSidePanelProps> = ({
         if (ctrlKey) {
             setSelectedIds(prev => {
                 const next = new Set(prev);
-                next.has(id) ? next.delete(id) : next.add(id);
+                if (next.has(id)) next.delete(id); else next.add(id);
                 if (next.size === 0) setSelectedSection(null);
                 return next;
             });
@@ -167,7 +167,7 @@ const StreamSidePanel: React.FC<StreamSidePanelProps> = ({
         onAddToFavorites(entry, folderId === '__fav_root__' ? null : folderId);
     }, [history, onAddToFavorites]);
 
-    const handleHistoryCrossDropToRoot = useCallback((historyId: string, _targetId: string) => {
+    const handleHistoryCrossDropToRoot = useCallback((historyId: string) => {
         const entry = history.find(e => e.historyId === historyId);
         if (entry) onAddToFavorites(entry, null);
     }, [history, onAddToFavorites]);

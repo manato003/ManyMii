@@ -703,8 +703,9 @@
   flex-shrink: 0;
 }
 
+/* flex: 1 で伸ばさない。ピン側の margin-auto でアイコン+タイトルを
+   中央寄りではない側（＝画面端側）へ寄せ、配信管理パネルと左右対称にする。 */
 .chat-panel-title {
-  flex: 1;
   font-size: 0.8rem;
   font-weight: 700;
   background: linear-gradient(to right, #8b5cf6, #ec4899);
@@ -720,6 +721,7 @@
    swapped（.left）で左側に来たときだけ右に戻す。 */
 .chat-panel-pin {
   order: -1;
+  margin-right: auto;
   background: transparent;
   border: none;
   color: var(--text-secondary);
@@ -743,6 +745,8 @@
 
 .chat-panel.left .chat-panel-pin {
   order: 0;
+  margin-right: 0;
+  margin-left: auto;
 }
 
 /* チャンネルセレクター */

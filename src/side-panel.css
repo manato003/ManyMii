@@ -226,6 +226,20 @@
   color: var(--danger);
 }
 
+/* 破壊的な操作（履歴からの削除）。
+   .danger はホバーで初めて赤くなるが、こちらは押す前から赤い。
+   「閉じる / 一覧から外す」と「消える」を見分けられるようにするため。 */
+.side-panel-toggle-btn.destructive {
+  color: var(--danger);
+  opacity: 0.65;
+}
+
+.side-panel-toggle-btn.destructive:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--danger);
+  opacity: 1;
+}
+
 .side-panel-drag-handle {
   background: transparent;
   border: none;

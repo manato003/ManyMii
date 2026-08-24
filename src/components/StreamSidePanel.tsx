@@ -489,13 +489,15 @@ const StreamSidePanel: React.FC<StreamSidePanelProps> = ({
                                 >
                                     <Plus size={13} />
                                 </button>
+                                {/* 追加済・お気に入りの X（閉じる / 一覧から外す）とは違い、
+                                    履歴からの削除は元に戻せない。アイコンと色で区別する */}
                                 <button
-                                    className="side-panel-toggle-btn danger"
+                                    className="side-panel-toggle-btn destructive"
                                     onClick={() => onRemoveFromHistory(entry.historyId)}
                                     title={label('履歴から削除', 'Remove from history')}
                                     aria-label={label('履歴から削除', 'Remove from history')}
                                 >
-                                    <X size={11} />
+                                    <Trash2 size={12} />
                                 </button>
                             </div>
                         );

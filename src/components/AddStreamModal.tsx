@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { X, Link as LinkIcon, Plus, Trash2, CheckCircle } from 'lucide-react';
+import { X, Link as LinkIcon, Plus, Trash2, CheckCircle, ClipboardPaste } from 'lucide-react';
 import type { Stream } from '../types';
 import { t } from '../i18n';
 import type { Locale } from '../i18n';
@@ -75,7 +75,45 @@ const AddStreamModal: React.FC<AddStreamModalProps> = ({ onClose, onAdd, locale,
     const [bulkInput, setBulkInput] = useState('');
     const [bulkResults, setBulkResults] = useState<{ ok: number; fail: number } | null>(null);
     const [resolveError, setResolveError] = useState<string | null>(null);
+    const [bulkError, setBulkError] = useState<string | null>(null);
     const singleInputRef = useRef<HTMLInputElement>(null);
+
+    // ── クリップボードからの貼り付け ──────────────────────────────────────
+    // readText() はユーザー操作起因でないと拒否されるため、必ずクリック
+    // ハンドラから直接呼ぶこと。権限拒否・非対応時は例外になるので握りつぶさない。
+    const readClipboard = async (): Promise<string | null> => {
+        try {
+            const text = await navigator.clipboard.readText();
+            return text.trim() || null;
+        } catch {
+            return null;
+        }
+    };
+
+    const clipboardErrorMessage = locale === 'ja'
+        ? 'クリップボードを読み取れませんでした（Ctrl+V で貼り付けてください）'
+        : 'Could not read the clipboard (use Ctrl+V instead)';
+
+    /** 貼り付けたら入力欄に入れるだけ。ここで追加まで走らせると誤爆が怖い */
+    const pasteSingle = async () => {
+        const text = await readClipboard();
+        if (!text) { setResolveError(clipboardErrorMessage); return; }
+        setResolveError(null);
+        // 複数行が入っていても単一入力欄なので先頭行だけ使う
+        setSingleInput(text.split(/\r?\n/)[0].trim());
+        singleInputRef.current?.focus();
+    };
+
+    /** まとめて追加は複数行が前提なので、既存の入力があれば行を足す */
+    const pasteBulk = async () => {
+        const text = await readClipboard();
+        if (!text) { setBulkError(clipboardErrorMessage); return; }
+        setBulkError(null);
+        setBulkInput(prev => {
+            const base = prev.replace(/\s+$/, '');
+            return base ? [base, text].join('\n') : text;
+        });
+    };
 
     // ── Single add (fully synchronous — resolution is handled in App.tsx) ──
     const addSingle = () => {
@@ -209,6 +247,14 @@ const AddStreamModal: React.FC<AddStreamModalProps> = ({ onClose, onAdd, locale,
                             onKeyDown={e => e.key === 'Enter' && addSingle()}
                             autoFocus
                         />
+                        <button
+                            className="paste-btn"
+                            onClick={() => { void pasteSingle(); }}
+                            title={locale === 'ja' ? 'クリップボードから貼り付け' : 'Paste from clipboard'}
+                            aria-label={locale === 'ja' ? 'クリップボードから貼り付け' : 'Paste from clipboard'}
+                        >
+                            <ClipboardPaste size={14} />
+                        </button>
                         <button className="add-btn" onClick={addSingle}>
                             <Plus size={14} />
                         </button>
@@ -235,9 +281,22 @@ const AddStreamModal: React.FC<AddStreamModalProps> = ({ onClose, onAdd, locale,
                             : 'https://www.twitch.tv/xxx\nhttps://www.youtube.com/watch?v=xxx\nShare code (single line) also accepted'
                         }
                         value={bulkInput}
-                        onChange={e => setBulkInput(e.target.value)}
+                        onChange={e => { setBulkInput(e.target.value); setBulkError(null); }}
                     />
+                    {bulkError && (
+                        <p style={{ fontSize: '0.72rem', color: 'var(--danger)', marginTop: '4px' }}>
+                            {bulkError}
+                        </p>
+                    )}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
+                        <button
+                            className="paste-btn"
+                            onClick={() => { void pasteBulk(); }}
+                            title={locale === 'ja' ? 'クリップボードから貼り付け' : 'Paste from clipboard'}
+                            aria-label={locale === 'ja' ? 'クリップボードから貼り付け' : 'Paste from clipboard'}
+                        >
+                            <ClipboardPaste size={13} />
+                        </button>
                         <button
                             className="add-btn"
                             style={{ flex: 1, justifyContent: 'center', display: 'flex', gap: '5px' }}

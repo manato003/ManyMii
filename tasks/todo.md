@@ -98,7 +98,13 @@ DOM順序を domSeq で固定し CSS の order で視覚位置を表現するよ
 Vitest 導入済み（2026-08-23）。純粋関数 51件をカバーしている。
 未カバーは React コンポーネントとフックで、レンダリング環境
 （`@testing-library/react` + jsdom）が要る。
-優先度が高いのは `useDragReorder` と `StreamGrid` の並べ替えロジック。
+
+**実際に取り逃した回帰**: `ChatSidePanel` が `useHoverPanel` に `isPinned` を
+渡しておらず、ピン留めしてもマウスアウトで隠れる状態になっていた
+（パネルは消えているのに `app-main` の余白だけ残る）。
+フックとコンポーネントの配線は純粋関数テストでは守れない。
+
+優先度: `useHoverPanel` のピン留め挙動 > `useDragReorder` / `StreamGrid` の並べ替え。
 
 ### 文言の管理が二重
 `i18n.ts` の `t()` と、各コンポーネントでローカル定義している `label(ja, en)` が混在。

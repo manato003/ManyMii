@@ -32,14 +32,13 @@ function getChatUrl(stream: Stream): string | null {
 }
 
 const ChatSidePanel: React.FC<ChatSidePanelProps> = ({ streams, locale, isPinned, onPinChange, swapped = false, hideDelay = 500 }) => {
-    const { visible, show, scheduleHide } = useHoverPanel({ hideDelay, idleTimeout: 5000 });
+    // isPinned を渡すこと。渡さないとピン留めしてもマウスアウトで隠れてしまい、
+    // パネルは消えているのに app-main の chat-pinned 分の余白だけが残る
+    const { visible: isVisible, show, scheduleHide } = useHoverPanel({ hideDelay, idleTimeout: 5000, isPinned });
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [isSelectorExpanded, setIsSelectorExpanded] = useState(false);
 
     const label = (ja: string, en: string) => locale === 'ja' ? ja : en;
-
-    // useHoverPanel がピン留めを織り込んだ値を返す
-    const isVisible = visible;
 
     // ── チャット表示可能なストリームのみ絞り込む ───────────────────────────
     const chatStreams = useMemo(

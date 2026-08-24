@@ -54,6 +54,7 @@ npm install
 npm run dev      # http://localhost:5173/
 npm run build    # tsc -b && vite build
 npm run lint
+npm test         # vitest run
 ```
 
 技術スタック: React 19 / TypeScript / Vite。依存は `lucide-react` のみで、

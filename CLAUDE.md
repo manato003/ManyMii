@@ -76,6 +76,8 @@ Twitch にオフライン判定・自動再確認・コメント欄の出し分�
 - `git add .` は `nul` ファイルを巻き込む危険があるため、ファイルを個別に指定する
 - iframeを扱う変更は特にテストを慎重に
 - 実装を変えたら `docs/SPEC.md` も更新する
+- ロジックを変えたら `npm test` と `npm run lint` を通す（どちらもクリーンな状態を維持）
+- 純粋関数を足したらテストも足す。テストは**わざと壊して落ちることを確認**してから完了とする
 - UIの実装・修正時は `C:/Dev/claude/skills/frontend-design/SKILL.md` に従う
 - コンポーネント作成・デザイン修正時は `C:/Dev/claude/skills/ui-ux-pro-max-skill-main/CLAUDE.md` を参照
   （本PJはカスタムCSS構成のため、Tailwind固有の指示は読み替えて適用）

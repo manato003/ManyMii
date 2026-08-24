@@ -93,20 +93,12 @@ DOM順序を domSeq で固定し CSS の order で視覚位置を表現するよ
 
 ## 品質・保守
 
-### ESLint のエラーを解消する（現在5件）
-`npm run lint` が失敗する状態。
+### テストの守備範囲を広げる
 
-| 箇所 | 内容 |
-|---|---|
-| `ChatSidePanel.tsx:50,58` | `react-hooks/set-state-in-effect`。選択中チャンネルの同期を effect でやっている |
-| `useHoverPanel.ts:33` | 同上。ピン留め時の visible 同期 |
-| `StreamSidePanel.tsx:112` | 三項演算子を文として使っている |
-| `StreamSidePanel.tsx:169` | 未使用引数 `_targetId`（eslint 設定に `argsIgnorePattern` がない） |
-
-### テストがない
-`parseInput.ts` と `useFavorites.ts` のツリー操作は純粋関数なので、Vitest を入れれば
-低コストで意味のあるカバレッジになる。フォルダ移動のバグ（サブツリー消失）は
-ユニットテストなら即座に捕まる種類だった。
+Vitest 導入済み（2026-08-23）。純粋関数 51件をカバーしている。
+未カバーは React コンポーネントとフックで、レンダリング環境
+（`@testing-library/react` + jsdom）が要る。
+優先度が高いのは `useDragReorder` と `StreamGrid` の並べ替えロジック。
 
 ### 文言の管理が二重
 `i18n.ts` の `t()` と、各コンポーネントでローカル定義している `label(ja, en)` が混在。

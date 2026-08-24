@@ -29,7 +29,7 @@ src/
     HelpModal.tsx            操作ガイド
     PlatformIcon.tsx         YouTube / Twitch アイコン
   hooks/
-    useFavorites.ts          お気に入りツリーの純粋な操作 + 永続化
+    useFavorites.ts          お気に入りの state と localStorage への橋渡し
     useStreamHistory.ts      履歴（最大50件）
     useSettings.ts           設定
     useHoverPanel.ts         パネルのホバー表示 / ピン留め
@@ -39,6 +39,7 @@ src/
   utils/
     parseInput.ts            URL / ハンドル / ID のパース
     resolveChannelId.ts      YouTubeチャンネル → ライブ video ID の解決
+    favoriteTree.ts          お気に入りツリーの純粋な操作（React非依存）
 ```
 
 ## 2. データモデル
@@ -302,3 +303,26 @@ TwitchのようなSPAでは `<title>` が `Twitch` のままになって表示�
 
 判明した表示名は `Stream` だけでなく、同じ `type` + `sourceId` を持つ履歴・お気に入りにも
 反映される（`propagateDisplayName`）。取得できなければ従来どおり識別子を表示する。
+
+## 12. テスト
+
+```bash
+npm test        # vitest run
+npm run test:watch
+```
+
+対象は**純粋関数だけ**。DOM もネットワークも使わないので即座に終わる。
+
+| ファイル | 守っているもの |
+|---|---|
+| `utils/parseInput.test.ts` | URL / ハンドル / チャンネルIDの解釈 |
+| `utils/resolveChannelId.test.ts` | `parseChannelPage` / `parseWatchPage`（YouTubeのHTML構造依存） |
+| `utils/favoriteTree.test.ts` | ツリー操作。特に**サブツリー消失**と深度制限 |
+
+**フィクスチャには実際に踏んだ罠を埋め込むこと。** 例えば watch ページのフィクスチャは
+`videoPrimaryInfoRenderer`（動画タイトル）を `videoOwnerRenderer` より先に配置してある。
+この順序を再現していないと、かつての「動画タイトルを拾ってしまう実装」を検出できない。
+
+テストを追加したら、**わざと壊して落ちることを確認する**。落ちないテストは無意味。
+
+未カバー: React コンポーネントとフック（レンダリング環境が必要）。

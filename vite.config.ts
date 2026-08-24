@@ -5,8 +5,9 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   test: {
-    // 対象はすべて純粋関数なので DOM は不要
+    // 既定は node（純粋関数のテストが大半で、DOM の起動は遅い）。
+    // DOM が要るテストはファイル先頭に `// @vitest-environment jsdom` を書く。
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
   },
 })

@@ -22,6 +22,7 @@
  */
 
 import { isYouTubeChannelId } from './parseInput';
+import { getCached, setCached } from './resolveCache';
 
 /**
  * 1リクエストあたりの上限時間。
@@ -127,6 +128,23 @@ function extractChannelName(html: string): string | undefined {
     }
     return undefined;
 }
+
+// ── キャッシュ ───────────────────────────────────────────────────────────────
+// r.jina.ai は単一障害点かつレート制限つき。同じ問い合わせを繰り返さない。
+// TTL は「その情報がどれくらいで陳腐化するか」で決めている。
+
+/** ライブ中の video ID は配信が続く限り変わらない */
+const TTL_LIVE = 10 * 60 * 1000;
+/** オフラインは配信開始で変わる。ユーザーが一番更新を期待する状態なので短く */
+const TTL_OFFLINE = 2 * 60 * 1000;
+/** 動画の投稿者は変わらない。実質不変 */
+const TTL_VIDEO_OWNER = 7 * 24 * 60 * 60 * 1000;
+/** Twitchの表示名はまれにしか変わらない */
+const TTL_TWITCH_NAME = 24 * 60 * 60 * 1000;
+
+const ytKey = (identifier: string) => `yt:${identifier}`;
+const videoKey = (videoId: string) => `vid:${videoId}`;
+const twitchKey = (login: string) => `tw:${login}`;
 
 // ── 公開API ──────────────────────────────────────────────────────────────────
 
@@ -261,15 +279,27 @@ function livePageUrl(identifier: string): string {
  * チャンネル識別子（@ハンドル または UCチャンネルID）を現在のライブ video ID に解決する。
  * この関数は例外を投げない。判定できなかった場合は status: 'error' を返す。
  */
-export async function resolveYouTubeChannel(identifier: string): Promise<ResolveResult> {
+export async function resolveYouTubeChannel(
+    identifier: string,
+    { force = false }: { force?: boolean } = {},
+): Promise<ResolveResult> {
+    // 「再確認」からの呼び出しは必ず取り直す。
+    // ここでキャッシュを返すと、ユーザーが更新を求めて押したのに
+    // 同じ結果が返ってきて壊れて見える
+    if (!force) {
+        const hit = getCached<ResolveResult>(ytKey(identifier));
+        if (hit) return hit;
+    }
+
     // ── 経路1（本命）: レンダリング済みチャンネルページ ──
     try {
         const html = await fetchRenderedPage(channelPageUrl(identifier));
         if (!html.includes('ytInitialData')) throw new Error('No ytInitialData (degraded page)');
         const info = parseChannelPage(html);
-        return info.videoId
+        const result: ResolveResult = info.videoId
             ? { status: 'live', videoId: info.videoId, channelId: info.channelId, channelName: info.channelName }
             : { status: 'offline', channelId: info.channelId, channelName: info.channelName };
+        return cacheResolveResult(identifier, result);
     } catch (err) {
         console.warn(`[resolveYouTubeChannel] rendered channel page failed for ${identifier}:`, err);
     }
@@ -285,14 +315,23 @@ export async function resolveYouTubeChannel(identifier: string): Promise<Resolve
         const channelId = extractChannelId(html);
         const channelName = extractChannelName(html);
         const videoId = extractVideoIdFromCanonical(html);
-        if (videoId && checkIsLive(html)) {
-            return { status: 'live', videoId, channelId, channelName };
-        }
-        return { status: 'offline', channelId, channelName };
+        const result: ResolveResult = videoId && checkIsLive(html)
+            ? { status: 'live', videoId, channelId, channelName }
+            : { status: 'offline', channelId, channelName };
+        return cacheResolveResult(identifier, result);
     } catch (err) {
         console.warn(`[resolveYouTubeChannel] /live fallback failed for ${identifier}:`, err);
+        // error はキャッシュしない。失敗を固定すると復旧しても直らなくなる
         return { status: 'error', message: err instanceof Error ? err.message : String(err) };
     }
+}
+
+/** live / offline だけをそれぞれのTTLで保存し、結果はそのまま返す */
+function cacheResolveResult(identifier: string, result: ResolveResult): ResolveResult {
+    if (result.status !== 'error') {
+        setCached(ytKey(identifier), result, result.status === 'live' ? TTL_LIVE : TTL_OFFLINE);
+    }
+    return result;
 }
 
 /**
@@ -300,13 +339,19 @@ export async function resolveYouTubeChannel(identifier: string): Promise<Resolve
  * チャンネル解決と同じく、レンダリング済みページを優先し、素のプロキシを保険にする。
  */
 export async function resolveVideoToChannel(videoId: string): Promise<WatchPageInfo | null> {
+    const hit = getCached<WatchPageInfo>(videoKey(videoId));
+    if (hit) return hit;
+
     const url = `https://www.youtube.com/watch?v=${videoId}`;
 
     try {
         const html = await fetchRenderedPage(url);
         if (!html.includes('ytInitialData')) throw new Error('No ytInitialData (degraded page)');
         const info = parseWatchPage(html);
-        if (info.handle || info.channelId) return info;
+        if (info.handle || info.channelId) {
+            setCached(videoKey(videoId), info, TTL_VIDEO_OWNER);
+            return info;
+        }
         throw new Error('No owner info found');
     } catch (err) {
         console.warn(`[resolveVideoToChannel] rendered watch page failed for ${videoId}:`, err);
@@ -315,7 +360,9 @@ export async function resolveVideoToChannel(videoId: string): Promise<WatchPageI
     try {
         const html = await fetchViaProxy(url, { minLength: 1000, isUsable: isUsableYouTubePage });
         const info = parseWatchPage(html);
-        return { ...info, channelName: info.channelName ?? extractChannelName(html) };
+        const merged = { ...info, channelName: info.channelName ?? extractChannelName(html) };
+        if (merged.handle || merged.channelId) setCached(videoKey(videoId), merged, TTL_VIDEO_OWNER);
+        return merged;
     } catch (err) {
         console.warn(`[resolveVideoToChannel] fallback failed for ${videoId}:`, err);
         return null;
@@ -328,6 +375,9 @@ export async function resolveVideoToChannel(videoId: string): Promise<WatchPageI
  * 取得できなければ null（呼び出し側はログイン名のまま表示する）。
  */
 export async function resolveTwitchChannelName(login: string): Promise<string | null> {
+    const hit = getCached<string>(twitchKey(login));
+    if (hit) return hit;
+
     const url = `https://www.twitch.tv/${encodeURIComponent(login)}`;
     try {
         let html: string;
@@ -339,16 +389,21 @@ export async function resolveTwitchChannelName(login: string): Promise<string | 
         // 末尾の "- Twitch" / "- Live on Twitch" / "- Twitchでライブ配信中" などを落とす。
         // 区切り記号をまたがないので、チャンネル名にハイフンが含まれていても壊れない。
         const strip = (s: string) => s.replace(/\s*[-–—|]\s*[^-–—|]*Twitch[^-–—|]*\s*$/i, '').trim();
+        const remember = (name: string) => {
+            setCached(twitchKey(login), name, TTL_TWITCH_NAME);
+            return name;
+        };
         const og = html.match(/<meta property="og:title" content="([^"]{1,80})"/);
         if (og) {
             const name = strip(og[1]);
-            if (name && name.toLowerCase() !== 'twitch') return name;
+            if (name && name.toLowerCase() !== 'twitch') return remember(name);
         }
         const title = html.match(/<title>([^<]{1,80})<\/title>/);
         if (title) {
             const name = strip(title[1]);
-            if (name && name.toLowerCase() !== 'twitch') return name;
+            if (name && name.toLowerCase() !== 'twitch') return remember(name);
         }
+        // 取れなかった場合はキャッシュしない（ログイン名のまま表示され、次回また試す）
         return null;
     } catch (err) {
         console.warn(`[resolveTwitchChannelName] failed for ${login}:`, err);

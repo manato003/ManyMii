@@ -74,6 +74,7 @@ interface Stream {
 | `chatPinned` / `streamPinned` | 各パネルのピン留め |
 | `panelSections` | 配信管理パネルのセクション折りたたみ |
 | `streamPanelWidth` | 配信管理パネルの幅 |
+| `resolveCache` | ライブ解決結果のキャッシュ（3章参照）。消えても動作に影響しない |
 
 すべて自動保存。明示的な「保存」操作は存在しない。
 
@@ -140,6 +141,29 @@ ytInitialData ごと取得できる。CORSプリフライトにも対応して�
 
 チャンネル識別子は `@ハンドル` と `UC…` のチャンネルIDの両方を受け付け、
 それぞれ `/@handle/live` と `/channel/UCxxx/live` を取得する。
+
+### キャッシュ
+
+`r.jina.ai` は**単一障害点**であり、無料枠のレート制限がある（調査中に実際に HTTP 429
+に到達した）。応答も 1.2〜2.7MB と重い。依存そのものは外せない（素のCORSプロキシは
+YouTubeが縮退ページを返すため機能しない）ので、**叩く回数を減らして緩和する。**
+
+結果は `localStorage` の `resolveCache` に保存する（`utils/resolveCache.ts`）。
+
+| 対象 | TTL | 理由 |
+|---|---|---|
+| ライブ中（video ID） | 10分 | 配信が続く限り変わらない |
+| オフライン | 2分 | 配信開始で変わる。ユーザーが一番更新を期待する状態 |
+| 動画 → チャンネル（逆引き） | 7日 | 動画の投稿者は変わらない。実質不変 |
+| Twitchの表示名 | 24時間 | まれにしか変わらない |
+
+守るべきルール:
+
+- **`status: 'error'` はキャッシュしない。** 失敗を固定すると、プロキシが復旧しても直らない
+- **「再確認」ボタンからの解決はキャッシュを無視する**（`resolveYouTubeChannel(id, { force: true })`）。
+  ユーザーが更新を求めて押したのに同じ結果を返すと壊れて見える
+- エントリ数の上限は100件。超えたら有効期限が近いものから捨てる
+- キャッシュが消えても動作は変わらない（遅くなるだけ）
 
 ### 縮退ページの検出
 
@@ -311,13 +335,17 @@ npm test        # vitest run
 npm run test:watch
 ```
 
-対象は**純粋関数だけ**。DOM もネットワークも使わないので即座に終わる。
+既定の環境は `node`。DOM が要るテストだけファイル先頭に
+`// @vitest-environment jsdom` を書いて切り替える（jsdom の起動は遅いため）。
 
-| ファイル | 守っているもの |
-|---|---|
-| `utils/parseInput.test.ts` | URL / ハンドル / チャンネルIDの解釈 |
-| `utils/resolveChannelId.test.ts` | `parseChannelPage` / `parseWatchPage`（YouTubeのHTML構造依存） |
-| `utils/favoriteTree.test.ts` | ツリー操作。特に**サブツリー消失**と深度制限 |
+| ファイル | 環境 | 守っているもの |
+|---|---|---|
+| `utils/parseInput.test.ts` | node | URL / ハンドル / チャンネルIDの解釈 |
+| `utils/resolveChannelId.test.ts` | node | `parseChannelPage` / `parseWatchPage`（YouTubeのHTML構造依存） |
+| `utils/favoriteTree.test.ts` | node | ツリー操作。特に**サブツリー消失**と深度制限 |
+| `utils/resolveCache.test.ts` | node | TTL の境界、期限切れの掃除、上限超過時の破棄順 |
+| `hooks/useHoverPanel.test.tsx` | jsdom | ホバー表示・遅延非表示・アイドル・**ピン留め** |
+| `components/ChatSidePanel.test.tsx` | jsdom | フックへの配線、チャンネル選択の解決 |
 
 **フィクスチャには実際に踏んだ罠を埋め込むこと。** 例えば watch ページのフィクスチャは
 `videoPrimaryInfoRenderer`（動画タイトル）を `videoOwnerRenderer` より先に配置してある。
@@ -325,4 +353,9 @@ npm run test:watch
 
 テストを追加したら、**わざと壊して落ちることを確認する**。落ちないテストは無意味。
 
-未カバー: React コンポーネントとフック（レンダリング環境が必要）。
+**フックのテストだけでは配線の欠落を検出できない。** 実際に、`ChatSidePanel` が
+`useHoverPanel` に `isPinned` を渡し忘れて「ピン留めしてもマウスアウトで隠れる」
+回帰を出したことがある。フック側は正しいままだったので、コンポーネントを
+レンダリングするテストが要る。
+
+未カバー: `useDragReorder` / `StreamGrid` の並べ替え、モーダル群。

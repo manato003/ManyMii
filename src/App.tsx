@@ -132,8 +132,12 @@ function App() {
     favoriteActions.setDisplayName(type, sourceId, displayName);
   }, [setHistoryDisplayName, favoriteActions]);
 
-  const resolveStreamInBackground = useCallback(async (streamId: string, handle: string) => {
-    const result = await resolveYouTubeChannel(handle);
+  /**
+   * force=true は「ユーザーが再確認を押した」ケース。
+   * キャッシュを無視して必ず取り直す。
+   */
+  const resolveStreamInBackground = useCallback(async (streamId: string, handle: string, force = false) => {
+    const result = await resolveYouTubeChannel(handle, { force });
 
     if (result.status !== 'error' && result.channelName) {
       propagateDisplayName('youtube', handle, result.channelName);
@@ -188,7 +192,8 @@ function App() {
       setStreams(prev => prev.map(s => ids.has(s.id) ? { ...s, isResolving: true } : s));
     }
     for (const s of targets) {
-      await resolveStreamInBackground(s.id, s.channelHandle!);
+      // 再確認は明示的な更新要求なのでキャッシュを使わない
+      await resolveStreamInBackground(s.id, s.channelHandle!, true);
     }
   }, [resolveStreamInBackground]);
 

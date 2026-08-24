@@ -1,4 +1,4 @@
-# Multistream Nexus
+# ManyMii
 
 YouTube と Twitch の**ライブ配信を複数同時に視聴する**ための Web アプリ。
 
@@ -6,6 +6,8 @@ YouTube と Twitch の**ライブ配信を複数同時に視聴する**ための
 UI は普段隠れているので視聴領域が最大化されます。
 
 **公開URL: https://multistream-app-eta.vercel.app**
+
+<sub>リポジトリ名とデプロイ先のURLは旧称 `multistream-app` のままです。変更すると共有済みのリンクが切れるため。</sub>
 
 ---
 

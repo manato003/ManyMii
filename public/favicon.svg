@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="ManyMii">
+  <!-- 多窓そのものをアイコンにする。1枠だけアクセント色にして
+       「複数を並べて、そのうちの1つを見ている」状態を表す。
+       グラデーションは使わない（CLAUDE.md 設計思想10）。 -->
+  <rect width="32" height="32" rx="7" fill="#0a0e17"/>
+  <g fill="#334155">
+    <rect x="6"  y="6"  width="9" height="7" rx="1.5"/>
+    <rect x="6"  y="16" width="9" height="7" rx="1.5"/>
+    <rect x="17" y="16" width="9" height="7" rx="1.5"/>
+  </g>
+  <rect x="17" y="6" width="9" height="7" rx="1.5" fill="#8b5cf6"/>
+</svg>

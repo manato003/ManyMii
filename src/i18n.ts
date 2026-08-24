@@ -19,7 +19,7 @@ export interface Translations {
 }
 
 const en: Translations = {
-    appTitle: 'Multistream Nexus',
+    appTitle: 'ManyMii',
     addStream: 'Add Stream',
     noStreams: 'Hover top edge to add streams',
     modalTitle: 'Add Stream',
@@ -32,12 +32,12 @@ const en: Translations = {
     importCode: 'Import (Apply Code)',
     importPlaceholder: 'Paste layout code here...',
     help: 'Help Guide',
-    helpTitle: 'How to use Multistream Nexus',
+    helpTitle: 'How to use ManyMii',
     guideText: '• Hover top edge → Menu (add streams, settings, share)\n• Hover left edge → Stream panel (reorder, show/hide, favorites, history)\n• Hover right edge → Chat panel (pin 📌 to keep visible)\n• Double-click stream → Fullscreen / restore\n• Drag handle (⋮⋮) to reorder streams or history\n• Paste a share code in bulk input to load streams\n• Settings (⚙) to swap panel sides',
 };
 
 const ja: Translations = {
-    appTitle: 'マルチストリーム Nexus',
+    appTitle: 'ManyMii',
     addStream: '配信を追加',
     noStreams: '画面上端にホバーして配信を追加',
     modalTitle: '配信を追加',
@@ -50,7 +50,7 @@ const ja: Translations = {
     importCode: 'コードから読み込み',
     importPlaceholder: 'ここにレイアウトコードを貼り付けてください...',
     help: '操作ガイド',
-    helpTitle: 'Multistream Nexus の使い方',
+    helpTitle: 'ManyMii の使い方',
     guideText: '・画面上端にホバー → メニュー（配信追加・設定・共有）\n・画面左端にホバー → 配信管理パネル（並べ替え・表示切替・お気に入り・履歴）\n・画面右端にホバー → コメントパネル（📌 ピン留めで常時表示）\n・配信枠をダブルクリック → 全画面拡大 / 復帰\n・ハンドル(⋮⋮)をドラッグして配信・履歴を並べ替え\n・まとめて追加欄に共有コードを貼り付けて読み込み可\n・設定(⚙)でパネルの左右配置を入れ替え可',
 };
 

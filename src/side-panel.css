@@ -53,10 +53,8 @@
 .side-panel-title {
   font-size: 0.8rem;
   font-weight: 700;
-  background: linear-gradient(to right, #8b5cf6, #ec4899);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  letter-spacing: 0.01em;
+  color: var(--text-primary);
 }
 
 .side-panel-header-actions {
@@ -722,10 +720,8 @@
 .chat-panel-title {
   font-size: 0.8rem;
   font-weight: 700;
-  background: linear-gradient(to right, #8b5cf6, #ec4899);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  letter-spacing: 0.01em;
+  color: var(--text-primary);
 }
 
 /* ピン留めボタンは常に「画面中央寄り」の端に置く。

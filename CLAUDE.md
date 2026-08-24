@@ -1,4 +1,4 @@
-# CLAUDE.md - Multistream Nexus
+# CLAUDE.md - ManyMii
 
 このファイルは新しいチャットセッション開始時に必ず読み込むこと。
 共通ワークフロー・原則は `C:/Dev/claude/CLAUDE.md` に定義されており、自動適用される。

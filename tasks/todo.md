@@ -2,7 +2,7 @@
 
 完了したものはここから消す。実装済みの内容は `docs/SPEC.md` を参照。
 
-最終更新: 2026-08-24
+最終更新: 2026-08-25
 
 ---
 
@@ -123,22 +123,24 @@ DOM順序を domSeq で固定し CSS の order で視覚位置を表現するよ
 
 実装順は未定。1〜3 の優先度もまだ決めていない。
 
-### 1. アプリ名が決まっていない
+### 1. アプリ名 — 決定・反映済み (2026-08-24)
 
-`MultistreamApp` は仮称でダサい、というのがユーザーの評価。加えて表記が割れている。
+**`ManyMii`**（many + 見）。表記はこれで統一する。カタカナ表記は用意しない。
 
-| 場所 | 現在の表記 |
-|---|---|
-| `package.json` の `name` | `multistream-app` |
-| `index.html` の `<title>` | `multistream-app` |
-| ヘッダー左上 | `Multistream Nexus` |
-| リポジトリ / Vercel | `multistream-app` |
+反映済み: `i18n.ts` の `appTitle` / `helpTitle`（ja・en とも `ManyMii`）、
+`index.html`（`lang="ja"` / `<title>` / `description` / og / `theme-color` /
+`favicon.svg`）、`package.json` の `name`、README / SPEC / CLAUDE.md の見出し。
 
-**名前を先に決める。決まるまで `index.html` のメタ情報整備（favicon / `lang` / `og:`）は
-着手しない**（どうせ二度手間になるため）。ユーザーは「1 はいつでも良い」と判断済み。
+あわせてタイトルの紫→ピンクのグラデーション文字を廃止した（設計思想10）。
+`.app-title` / `.side-panel-title` / `.chat-panel-title` の3箇所。
 
-あわせて、ヘッダーのタイトルの文字色・グラデーションが AI slop なデザインなので直す
-（設計思想10）。現状は `--accent` 系のグラデーション。
+**未変更（意図的）**:
+
+- GitHub リポジトリ名と Vercel のプロジェクト名は `multistream-app` のまま。
+  変えると公開URL `multistream-app-eta.vercel.app` が変わり、共有済みのリンクが切れる
+- パネル端の 1px の `border-image` グラデーション（4箇所）は残してある。
+  文字ではなく細い装飾なので slop 感が薄い。気になるなら別途判断する
+- og:image は未設定（画像を用意していないため）
 
 ### 2. 履歴フィールドの削除ボタンを赤いゴミ箱に変える — 実装済み (2026-08-24)
 

@@ -77,13 +77,13 @@ body {
   pointer-events: auto;
 }
 
+/* 紫→ピンクのグラデーション文字は使わない（CLAUDE.md 設計思想10）。
+   アイコンだけを accent にして、文字は素の色に置く。 */
 .app-title {
   font-size: 0.85rem;
   font-weight: 700;
-  background: linear-gradient(to right, #8b5cf6, #ec4899);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  letter-spacing: 0.01em;
+  color: var(--text-primary);
   display: flex;
   align-items: center;
   gap: 6px;

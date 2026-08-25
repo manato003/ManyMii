@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
-import { EyeOff, Eye, Plus, X, Clock, GripVertical, ChevronRight, Star, FolderPlus, Pin, PinOff, ArrowRight, Trash2, RefreshCw, LayoutGrid, LayoutPanelLeft, LayoutPanelTop } from 'lucide-react';
+import { EyeOff, Eye, Plus, X, Clock, GripVertical, ChevronRight, Star, FolderPlus, Pin, PinOff, ArrowRight, Trash2, RefreshCw, LayoutGrid, LayoutPanelLeft, LayoutPanelTop, LayoutDashboard } from 'lucide-react';
 import type { Stream, FavoriteNode } from '../types';
 import { toDisplayName } from '../types';
 import type { Locale } from '../i18n';
@@ -20,6 +20,7 @@ const LAYOUT_CHOICES: { id: TemplateId; Icon: typeof LayoutGrid; flip?: boolean;
     { id: 'main-left', Icon: LayoutPanelLeft, ja: 'メイン左', en: 'Main left' },
     { id: 'main-right', Icon: LayoutPanelLeft, flip: true, ja: 'メイン右', en: 'Main right' },
     { id: 'main-top', Icon: LayoutPanelTop, ja: 'メイン上', en: 'Main top' },
+    { id: 'l-shape', Icon: LayoutDashboard, ja: 'L字', en: 'L-shape' },
 ];
 
 // ── セクション折りたたみ永続化 ──

@@ -12,16 +12,19 @@ import {
     tracksFor,
     resizeTracks,
     trackOffsets,
+    pickLShapeGrid,
+    EMPTY_LAYOUT_STORE,
     MAIN_RATIO,
     MIN_FR,
     type TemplateId,
+    type LayoutStore,
     type Slot,
 } from './layout';
 
 const VP_W = 1920;
 const VP_H = 1080;
 
-const ALL: TemplateId[] = ['auto', 'main-left', 'main-right', 'main-top'];
+const ALL: TemplateId[] = ['auto', 'main-left', 'main-right', 'main-top', 'l-shape'];
 
 /** 区画が占めるマスの集合。重なりと範囲の検証に使う */
 function cellsOf(slot: Slot): string[] {
@@ -43,8 +46,14 @@ describe('availableTemplates', () => {
         expect(availableTemplates(0)).toEqual(['auto']);
     });
 
-    it('2枠以上なら全テンプレートが選べる', () => {
-        expect(availableTemplates(2)).toEqual(ALL);
+    it('2〜4枠では l-shape 以外が選べる', () => {
+        // 4枠だと L 字のメインが1マスになり、サブと同じ大きさで意味がない
+        expect(availableTemplates(2)).toEqual(['auto', 'main-left', 'main-right', 'main-top']);
+        expect(availableTemplates(4)).toEqual(['auto', 'main-left', 'main-right', 'main-top']);
+    });
+
+    it('5枠以上なら全テンプレートが選べる', () => {
+        expect(availableTemplates(5)).toEqual(ALL);
         expect(availableTemplates(9)).toEqual(ALL);
     });
 });
@@ -272,133 +281,221 @@ describe('tracksFor', () => {
     const base = buildLayout('main-left', 4, VP_W, VP_H);   // cols 2本 / rows 3本
 
     it('保存が無ければ null', () => {
-        expect(tracksFor({}, 4, base)).toBeNull();
+        expect(tracksFor(EMPTY_LAYOUT_STORE, 4, base)).toBeNull();
     });
 
     it('本数が一致すれば返す', () => {
         const saved = { cols: [2.5, 0.5], rows: [1, 1, 1] };
-        const store = { 4: { templateId: 'main-left' as const, tracks: saved } };
+        const store: LayoutStore = { templateId: 'main-left', tracks: { 4: saved } };
         expect(tracksFor(store, 4, base)).toEqual(saved);
     });
 
     // 本数が違うものを当てると区画とトラックがずれてレイアウトが崩れる
     it('列の本数が違えば使わない', () => {
-        const store = { 4: { templateId: 'main-left' as const, tracks: { cols: [1, 1, 1], rows: [1, 1, 1] } } };
+        const store: LayoutStore = { templateId: 'main-left', tracks: { 4: { cols: [1, 1, 1], rows: [1, 1, 1] } } };
         expect(tracksFor(store, 4, base)).toBeNull();
     });
 
     it('行の本数が違えば使わない', () => {
-        const store = { 4: { templateId: 'main-left' as const, tracks: { cols: [2, 1], rows: [1, 1] } } };
+        const store: LayoutStore = { templateId: 'main-left', tracks: { 4: { cols: [2, 1], rows: [1, 1] } } };
+        expect(tracksFor(store, 4, base)).toBeNull();
+    });
+
+    it('別の枠数で保存された幅は使わない', () => {
+        const store: LayoutStore = { templateId: 'main-left', tracks: { 5: { cols: [2, 1], rows: [1, 1, 1] } } };
         expect(tracksFor(store, 4, base)).toBeNull();
     });
 });
 
 describe('setTracksFor', () => {
     it('テンプレートを維持したまま幅を保存する', () => {
-        const store = setTemplateFor({}, 4, 'main-top');
+        const store = setTemplateFor(EMPTY_LAYOUT_STORE, 'main-top');
         const next = setTracksFor(store, 4, { cols: [1, 1, 1], rows: [3, 1] });
-        expect(next[4].templateId).toBe('main-top');
-        expect(next[4].tracks).toEqual({ cols: [1, 1, 1], rows: [3, 1] });
+        expect(next.templateId).toBe('main-top');
+        expect(next.tracks[4]).toEqual({ cols: [1, 1, 1], rows: [3, 1] });
+    });
+
+    it('枠数ごとに独立して幅を持てる', () => {
+        let store = setTracksFor(EMPTY_LAYOUT_STORE, 4, { cols: [2, 1], rows: [1, 1, 1] });
+        store = setTracksFor(store, 6, { cols: [3, 1], rows: [1, 1, 1, 1, 1] });
+        expect(store.tracks[4]).toEqual({ cols: [2, 1], rows: [1, 1, 1] });
+        expect(store.tracks[6]).toEqual({ cols: [3, 1], rows: [1, 1, 1, 1, 1] });
     });
 
     // テンプレートを変えると列数・行数が変わるので、古い幅は残してはいけない
-    it('テンプレートを変えると保存済みの幅が破棄される', () => {
-        const withTracks = setTracksFor(setTemplateFor({}, 4, 'main-top'), 4, { cols: [1, 1, 1], rows: [3, 1] });
-        const switched = setTemplateFor(withTracks, 4, 'main-left');
-        expect(switched[4].tracks).toBeUndefined();
+    it('テンプレートを変えると保存済みの幅がすべて破棄される', () => {
+        const withTracks = setTracksFor(setTemplateFor(EMPTY_LAYOUT_STORE, 'main-top'), 4, { cols: [1, 1, 1], rows: [3, 1] });
+        const switched = setTemplateFor(withTracks, 'main-left');
+        expect(switched.tracks).toEqual({});
     });
 
     it('元のストアを変更しない', () => {
-        const store = setTemplateFor({}, 4, 'auto');
+        const store = setTemplateFor(EMPTY_LAYOUT_STORE, 'auto');
         setTracksFor(store, 4, { cols: [1, 1], rows: [1, 1] });
-        expect(store[4].tracks).toBeUndefined();
+        expect(store.tracks).toEqual({});
+    });
+});
+
+describe('getTemplateFor', () => {
+    it('未設定なら auto', () => {
+        expect(getTemplateFor(EMPTY_LAYOUT_STORE, 4)).toBe('auto');
+    });
+
+    it('保存された値を返す', () => {
+        expect(getTemplateFor({ templateId: 'main-top', tracks: {} }, 4)).toBe('main-top');
+    });
+
+    // 枠を1つ非表示にしただけでレイアウトが auto に戻る不具合があった。
+    // テンプレートは枠数ごとではなく全体で1つ持つ
+    it('枠数が変わってもテンプレートは維持される', () => {
+        const store = setTemplateFor(EMPTY_LAYOUT_STORE, 'main-top');
+        expect(getTemplateFor(store, 6)).toBe('main-top');
+        expect(getTemplateFor(store, 5)).toBe('main-top');   // 1枠 非表示にした
+        expect(getTemplateFor(store, 2)).toBe('main-top');
+    });
+
+    it('その枠数で成立しないテンプレートは auto に落ちる', () => {
+        expect(getTemplateFor({ templateId: 'main-left', tracks: {} }, 1)).toBe('auto');
+        expect(getTemplateFor({ templateId: 'l-shape', tracks: {} }, 3)).toBe('auto');
     });
 });
 
 describe('parseLayoutStore', () => {
-    it('正常な JSON を復元する', () => {
-        const raw = JSON.stringify({ 4: { templateId: 'main-left' } });
-        expect(parseLayoutStore(raw)).toEqual({ 4: { templateId: 'main-left' } });
+    it('現行形式を復元する', () => {
+        const raw = JSON.stringify({ templateId: 'main-left', tracks: { 4: { cols: [2, 1], rows: [1, 1, 1] } } });
+        expect(parseLayoutStore(raw)).toEqual({
+            templateId: 'main-left',
+            tracks: { 4: { cols: [2, 1], rows: [1, 1, 1] } },
+        });
     });
 
-    it('null なら空', () => {
-        expect(parseLayoutStore(null)).toEqual({});
+    it('null なら既定', () => {
+        expect(parseLayoutStore(null)).toEqual(EMPTY_LAYOUT_STORE);
     });
 
-    it('壊れた JSON でも例外を投げずに空を返す', () => {
-        expect(parseLayoutStore('{{{')).toEqual({});
+    it('壊れた JSON でも例外を投げずに既定を返す', () => {
+        expect(parseLayoutStore('{{{')).toEqual(EMPTY_LAYOUT_STORE);
     });
 
-    it('配列や非オブジェクトは空として扱う', () => {
-        expect(parseLayoutStore('[1,2,3]')).toEqual({});
-        expect(parseLayoutStore('"hello"')).toEqual({});
-        expect(parseLayoutStore('null')).toEqual({});
+    it('配列や非オブジェクトは既定として扱う', () => {
+        expect(parseLayoutStore('[1,2,3]')).toEqual(EMPTY_LAYOUT_STORE);
+        expect(parseLayoutStore('"hello"')).toEqual(EMPTY_LAYOUT_STORE);
+        expect(parseLayoutStore('null')).toEqual(EMPTY_LAYOUT_STORE);
     });
 
-    it('未知のテンプレート名を持つエントリは捨てる', () => {
-        const raw = JSON.stringify({ 3: { templateId: 'diagonal' }, 4: { templateId: 'auto' } });
-        expect(parseLayoutStore(raw)).toEqual({ 4: { templateId: 'auto' } });
+    it('未知のテンプレート名は auto に落とす', () => {
+        const raw = JSON.stringify({ templateId: 'diagonal', tracks: {} });
+        expect(parseLayoutStore(raw).templateId).toBe('auto');
     });
 
-    it('保存された tracks を復元する', () => {
-        const raw = JSON.stringify({ 4: { templateId: 'main-left', tracks: { cols: [2.5, 0.5], rows: [1, 1, 1] } } });
-        expect(parseLayoutStore(raw)[4].tracks).toEqual({ cols: [2.5, 0.5], rows: [1, 1, 1] });
+    // 旧形式は「枠数ごとに templateId」を持っていた
+    it('旧形式からテンプレートを引き継ぐ', () => {
+        const raw = JSON.stringify({ 4: { templateId: 'main-top' }, 6: { templateId: 'main-top' } });
+        expect(parseLayoutStore(raw).templateId).toBe('main-top');
     });
 
-    // 片方だけ当てると区画とトラックがずれる。中途半端に適用しない
+    it('旧形式の tracks も引き継ぐ', () => {
+        const raw = JSON.stringify({ 4: { templateId: 'main-left', tracks: { cols: [2, 1], rows: [1, 1, 1] } } });
+        expect(parseLayoutStore(raw).tracks[4]).toEqual({ cols: [2, 1], rows: [1, 1, 1] });
+    });
+
     it('cols と rows の片方だけが壊れていたら tracks ごと捨てる', () => {
-        const raw = JSON.stringify({ 4: { templateId: 'auto', tracks: { cols: [1, 1], rows: 'broken' } } });
-        const parsed = parseLayoutStore(raw);
-        expect(parsed[4].templateId).toBe('auto');       // テンプレートは残す
-        expect(parsed[4].tracks).toBeUndefined();
+        const raw = JSON.stringify({ templateId: 'auto', tracks: { 4: { cols: [1, 1], rows: 'broken' } } });
+        expect(parseLayoutStore(raw).tracks[4]).toBeUndefined();
     });
 
     it('MIN_FR を下回る値を含む tracks は捨てる', () => {
-        const raw = JSON.stringify({ 4: { templateId: 'auto', tracks: { cols: [0, 2], rows: [1, 1] } } });
-        expect(parseLayoutStore(raw)[4].tracks).toBeUndefined();
+        const raw = JSON.stringify({ templateId: 'auto', tracks: { 4: { cols: [0, 2], rows: [1, 1] } } });
+        expect(parseLayoutStore(raw).tracks[4]).toBeUndefined();
     });
 
     it('数値でない値を含む tracks は捨てる', () => {
-        const raw = JSON.stringify({ 4: { templateId: 'auto', tracks: { cols: [1, null], rows: [1, 1] } } });
-        expect(parseLayoutStore(raw)[4].tracks).toBeUndefined();
+        const raw = JSON.stringify({ templateId: 'auto', tracks: { 4: { cols: [1, null], rows: [1, 1] } } });
+        expect(parseLayoutStore(raw).tracks[4]).toBeUndefined();
     });
 
     it('空配列の tracks は捨てる', () => {
-        const raw = JSON.stringify({ 4: { templateId: 'auto', tracks: { cols: [], rows: [] } } });
-        expect(parseLayoutStore(raw)[4].tracks).toBeUndefined();
+        const raw = JSON.stringify({ templateId: 'auto', tracks: { 4: { cols: [], rows: [] } } });
+        expect(parseLayoutStore(raw).tracks[4]).toBeUndefined();
     });
 
     it('枠数として不正なキーは捨てる', () => {
-        const raw = JSON.stringify({ abc: { templateId: 'auto' }, 0: { templateId: 'auto' }, 2: { templateId: 'auto' } });
-        expect(parseLayoutStore(raw)).toEqual({ 2: { templateId: 'auto' } });
+        const raw = JSON.stringify({ templateId: 'auto', tracks: { abc: { cols: [1, 1], rows: [1, 1] }, 2: { cols: [1, 1], rows: [1, 1] } } });
+        expect(Object.keys(parseLayoutStore(raw).tracks)).toEqual(['2']);
     });
 });
 
-describe('getTemplateFor / setTemplateFor', () => {
-    it('未設定の枠数では auto', () => {
-        expect(getTemplateFor({}, 4)).toBe('auto');
+describe('l-shape', () => {
+    // 左上メイン + 右列 + 下段。枠数 n は「列数 + 行数」に振り分けられる
+    it('枠数が 列数 + 行数 に一致する', () => {
+        for (let n = 4; n <= 14; n++) {
+            const { cols, rows } = pickLShapeGrid(n, VP_W, VP_H);
+            expect(cols + rows).toBe(n);
+        }
     });
 
-    it('保存された値を返す', () => {
-        expect(getTemplateFor({ 4: { templateId: 'main-top' } }, 4)).toBe('main-top');
+    it('16:9 の画面では列数と行数が一致し、メインとサブの縦横比が揃う', () => {
+        // C = R のとき メイン と サブ の縦横比が等しくなる（黒帯が最小）
+        const { cols, rows } = pickLShapeGrid(8, VP_W, VP_H);
+        expect(cols).toBe(rows);
+        expect(cols).toBe(4);
     });
 
-    it('枠数が減ってテンプレートが成立しなくなったら auto に落ちる', () => {
-        // 4枠のときに main-left を選び、その後1枠になったケース
-        expect(getTemplateFor({ 1: { templateId: 'main-left' } }, 1)).toBe('auto');
+    it('ユーザー要望どおり 8枠で 縦3 + 横4 の L 字になる', () => {
+        const { slots } = buildLayout('l-shape', 8, VP_W, VP_H);
+        const main = slots[0];
+        expect(main).toEqual({ col: 1, row: 1, colSpan: 3, rowSpan: 3 });
+        // 右の列が3枚
+        expect(slots.slice(1, 4).every(s => s.col === 4)).toBe(true);
+        // 下の段が4枚
+        expect(slots.slice(4).every(s => s.row === 4)).toBe(true);
+        expect(slots.slice(4)).toHaveLength(4);
     });
 
-    it('枠数ごとに独立している', () => {
-        const store = setTemplateFor(setTemplateFor({}, 4, 'main-left'), 2, 'main-top');
-        expect(getTemplateFor(store, 4)).toBe('main-left');
-        expect(getTemplateFor(store, 2)).toBe('main-top');
-        expect(getTemplateFor(store, 3)).toBe('auto');
+    it('メインは必ず2マス以上を占める', () => {
+        for (let n = 5; n <= 14; n++) {
+            const main = buildLayout('l-shape', n, VP_W, VP_H).slots[0];
+            expect(main.colSpan * main.rowSpan).toBeGreaterThanOrEqual(2);
+        }
     });
 
-    it('setTemplateFor は元のストアを変更しない', () => {
-        const store = {};
-        setTemplateFor(store, 4, 'main-left');
-        expect(store).toEqual({});
+    it('縦長の画面では行数が増える', () => {
+        const wide = pickLShapeGrid(10, 1920, 1080);
+        const tall = pickLShapeGrid(10, 1080, 1920);
+        expect(tall.rows).toBeGreaterThan(wide.rows);
+    });
+
+    it('ウルトラワイドでは列数が増える', () => {
+        const normal = pickLShapeGrid(10, 1920, 1080);
+        const ultra = pickLShapeGrid(10, 2560, 1080);
+        expect(ultra.cols).toBeGreaterThan(normal.cols);
+    });
+
+    // メインとサブの両方の縦横比を見ていないと、16:9 でない画面で
+    // メインが極端に細長い選択をしてしまう
+    it('16:9 でない画面ではメインの縦横比も考慮して選ぶ', () => {
+        // サブの縦横比だけを最適化すると 2x8 が選ばれるが、
+        // それだとメインが 1x7 になって極端に縦長になる
+        expect(pickLShapeGrid(10, 1080, 1920)).toEqual({ cols: 3, rows: 7 });
+    });
+
+    // 横長の画面（このアプリは PC 専用なので実質こちら）ではメインが極端にならない。
+    // 縦長モニタでは枠数が少ないと L 字自体が成立しにくく、どう選んでも
+    // メインが細長くなる。そこは許容する
+    it('横長の画面ではメインの縦横比が 16:9 の 2.5倍以内に収まる', () => {
+        for (const [w, h] of [[1920, 1080], [2560, 1080], [3440, 1440]]) {
+            for (let n = 6; n <= 12; n++) {
+                const { cols, rows } = pickLShapeGrid(n, w, h);
+                const main = (w * (cols - 1) / cols) / (h * (rows - 1) / rows);
+                const ratio = main / (16 / 9);
+                expect(Math.max(ratio, 1 / ratio)).toBeLessThan(2.5);
+            }
+        }
+    });
+
+    it('5枠未満では選べない', () => {
+        expect(availableTemplates(4)).not.toContain('l-shape');
+        expect(availableTemplates(5)).toContain('l-shape');
     });
 });
 

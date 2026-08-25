@@ -36,8 +36,8 @@ export function useStreamLayout(streamCount: number) {
 
     const setTemplate = useCallback((id: TemplateId) => {
         // テンプレートを変えると列数・行数が変わるので、調整済みの幅は捨てる
-        setStore(prev => persist(setTemplateFor(prev, streamCount, id)));
-    }, [streamCount]);
+        setStore(prev => persist(setTemplateFor(prev, id)));
+    }, []);
 
     const setTracks = useCallback((tracks: { cols: number[]; rows: number[] }) => {
         setStore(prev => persist(setTracksFor(prev, streamCount, tracks)));

@@ -285,38 +285,59 @@ body {
   z-index: 6;
 }
 
-/* 既定では見えない（設計思想1）。掴める幅は最小限にして、
-   iframe 側のコントロールを覆わないようにする。 */
+/* ハンドル本体は**常に透明**。線を引くと格子が配信画面に侵食して邪魔になる。
+   境界に近づいたときのカーソル変化を主な手がかりにし、
+   掴めることを示す小さなグリップだけを ::after で出す（設計思想1）。 */
 .grid-resize-handle {
   position: absolute;
   pointer-events: auto;
+  background: transparent;
+}
+
+.grid-resize-handle::after {
+  content: '';
+  position: absolute;
+  border-radius: 999px;
+  background: var(--text-primary);
   opacity: 0;
-  background: var(--accent);
   transition: opacity 0.12s;
+}
+
+.grid-resize-handle:hover::after {
+  opacity: 0.85;
 }
 
 .grid-resize-handle.col {
   top: 0;
   bottom: 0;
-  width: 7px;
-  margin-left: -3.5px;
+  width: 9px;
+  margin-left: -4.5px;
   cursor: col-resize;
+}
+
+/* 境界の中央に短いグリップだけ出す */
+.grid-resize-handle.col::after {
+  top: 50%;
+  left: 50%;
+  width: 3px;
+  height: 34px;
+  transform: translate(-50%, -50%);
 }
 
 .grid-resize-handle.row {
   left: 0;
   right: 0;
-  height: 7px;
-  margin-top: -3.5px;
+  height: 9px;
+  margin-top: -4.5px;
   cursor: row-resize;
 }
 
-.stream-grid-container:hover .grid-resize-handle {
-  opacity: 0.25;
-}
-
-.stream-grid-container .grid-resize-handle:hover {
-  opacity: 1;
+.grid-resize-handle.row::after {
+  top: 50%;
+  left: 50%;
+  width: 34px;
+  height: 3px;
+  transform: translate(-50%, -50%);
 }
 
 /* 拡大表示。要素を差し替えるのではなく、同じコンテナのまま余白だけ落とす。

@@ -5,9 +5,9 @@ YouTube と Twitch の**ライブ配信を複数同時に視聴する**ための
 配信を追加するとアスペクト比 16:9 を保ったまま画面いっぱいに敷き詰められ、
 UI は普段隠れているので視聴領域が最大化されます。
 
-**公開URL: https://multistream-app-eta.vercel.app**
+**公開URL: https://manymii.vercel.app**
 
-<sub>公開URLのホスト名は Vercel が旧称から自動生成したものが残っています。既に共有したリンクを切らないため、そのまま使っています。</sub>
+<sub>旧URL `multistream-app-eta.vercel.app` は 308 で新URLへリダイレクトされます。</sub>
 
 ---
 

@@ -8,7 +8,7 @@
 ## このアプリは何か
 
 **YouTube と Twitch のライブ配信を複数同時に視聴するための Web アプリ。**
-実装の詳細は `docs/SPEC.md`、公開先は https://multistream-app-eta.vercel.app
+実装の詳細は `docs/SPEC.md`、公開先は https://manymii.vercel.app
 
 ---
 

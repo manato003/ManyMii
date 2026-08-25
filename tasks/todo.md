@@ -140,13 +140,13 @@ DOM順序を domSeq で固定し CSS の order で視覚位置を表現するよ
 `manato003/ManyMii`。旧URLからは GitHub が 301 を張るのでリンクは切れない。
 Vercel のプロジェクト名も `manymii` に変更済み。
 
+公開URLも `https://manymii.vercel.app` に移行済み (2026-08-25)。
+旧URL `multistream-app-eta.vercel.app` は Vercel の Redirect 設定で
+308 を返すようにしてあるため、共有済みリンクも切れていない。
+**旧ドメインは削除しないこと**（削除するとリダイレクトも消える）。
+
 **未変更**:
 
-- **公開URLは `multistream-app-eta.vercel.app` のまま。** Vercel はプロジェクト改名後も
-  旧称から自動生成したドメインを割り当てたまま保持しており、結果として
-  共有済みリンクが生きている。`manymii.vercel.app` は未割り当て（404）。
-  欲しければ Settings → Domains から追加する。**その場合も旧ドメインは
-  外さないこと**（外した瞬間に共有済みリンクが切れる）
 - ローカルの作業フォルダは `C:\Dev\projects\multistream-app` のまま
 - パネル端の 1px の `border-image` グラデーション（4箇所）は残してある。
   文字ではなく細い装飾なので slop 感が薄い。気になるなら別途判断する

@@ -139,6 +139,49 @@ export function buildLayout(
     }
 }
 
+// ── 境界ドラッグ ─────────────────────────────────────────────────────────────
+
+/**
+ * 1トラックの最小 fr。0 まで縮められると枠が消えて掴み直せなくなる。
+ */
+export const MIN_FR = 0.3;
+
+/**
+ * `index` 番目と `index + 1` 番目の境界を動かす。
+ * 総和は変えない（片方に足した分をもう片方から引く）ので、
+ * グリッド全体の大きさは変わらない。
+ *
+ * 最小値に張り付いたらそれ以上は動かさない。元の配列は変更しない。
+ */
+export function resizeTracks(tracks: number[], index: number, deltaFr: number): number[] {
+    if (index < 0 || index + 1 >= tracks.length) return tracks;
+    const a = tracks[index];
+    const b = tracks[index + 1];
+    // 両側が MIN_FR を下回らない範囲に delta を丸める
+    const clamped = Math.max(MIN_FR - a, Math.min(b - MIN_FR, deltaFr));
+    if (clamped === 0) return tracks;
+    const next = [...tracks];
+    next[index] = a + clamped;
+    next[index + 1] = b - clamped;
+    return next;
+}
+
+/**
+ * 各境界の位置を 0〜1 の比率で返す。長さは `tracks.length - 1`。
+ * ハンドルを置く座標に使う。
+ */
+export function trackOffsets(tracks: number[]): number[] {
+    const total = tracks.reduce((sum, f) => sum + f, 0);
+    if (total <= 0) return [];
+    const out: number[] = [];
+    let acc = 0;
+    for (let i = 0; i < tracks.length - 1; i++) {
+        acc += tracks[i];
+        out.push(acc / total);
+    }
+    return out;
+}
+
 // ── 永続化する状態 ───────────────────────────────────────────────────────────
 
 export interface LayoutState {
@@ -163,6 +206,12 @@ function isTemplateId(v: unknown): v is TemplateId {
  * localStorage の生文字列から復元する。
  * 壊れていたら握りつぶして空にする（レイアウトは無くても動く）。
  */
+function parseTrackArray(v: unknown): number[] | null {
+    if (!Array.isArray(v) || v.length === 0) return null;
+    if (!v.every(n => typeof n === 'number' && Number.isFinite(n) && n >= MIN_FR)) return null;
+    return v as number[];
+}
+
 export function parseLayoutStore(raw: string | null): LayoutStore {
     if (!raw) return {};
     try {
@@ -172,14 +221,39 @@ export function parseLayoutStore(raw: string | null): LayoutStore {
         for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
             const count = Number(key);
             if (!Number.isInteger(count) || count < 1) continue;
-            const id = (value as { templateId?: unknown } | null)?.templateId;
-            if (!isTemplateId(id)) continue;
-            out[count] = { templateId: id };
+            const entry = value as { templateId?: unknown; tracks?: unknown } | null;
+            if (!isTemplateId(entry?.templateId)) continue;
+
+            const state: LayoutState = { templateId: entry.templateId };
+            const t = entry.tracks as { cols?: unknown; rows?: unknown } | undefined;
+            const cols = parseTrackArray(t?.cols);
+            const rows = parseTrackArray(t?.rows);
+            // 片方だけ壊れているものは丸ごと捨てる。中途半端に適用しない
+            if (cols && rows) state.tracks = { cols, rows };
+            out[count] = state;
         }
         return out;
     } catch {
         return {};
     }
+}
+
+/**
+ * 保存されたトラックを、いま表示しようとしているレイアウトに適用してよいか判定する。
+ *
+ * **本数が一致しないものは使わない。** テンプレートを変えたり枠数が変わったりすると
+ * 列数・行数が変わるため、そのまま当てると区画とトラックがずれて崩れる。
+ */
+export function tracksFor(
+    store: LayoutStore,
+    count: number,
+    base: ResolvedLayout,
+): { cols: number[]; rows: number[] } | null {
+    const saved = store[count]?.tracks;
+    if (!saved) return null;
+    if (saved.cols.length !== base.colTracks.length) return null;
+    if (saved.rows.length !== base.rowTracks.length) return null;
+    return saved;
 }
 
 /** その枠数で選ばれているテンプレート。未設定・適用不可なら auto */
@@ -189,9 +263,22 @@ export function getTemplateFor(store: LayoutStore, count: number): TemplateId {
     return id;
 }
 
-/** 元のストアは変更せず、新しいストアを返す */
+/**
+ * 元のストアは変更せず、新しいストアを返す。
+ * **テンプレートを変えたら tracks は破棄する**（列数・行数が変わるため）。
+ */
 export function setTemplateFor(store: LayoutStore, count: number, templateId: TemplateId): LayoutStore {
     return { ...store, [count]: { templateId } };
+}
+
+/** 境界ドラッグの結果を保存する。テンプレートは維持する */
+export function setTracksFor(
+    store: LayoutStore,
+    count: number,
+    tracks: { cols: number[]; rows: number[] },
+): LayoutStore {
+    const templateId = store[count]?.templateId ?? 'auto';
+    return { ...store, [count]: { templateId, tracks } };
 }
 
 /** fr の配列を CSS の grid-template 値にする */

@@ -3,7 +3,7 @@ import StreamFrame from './StreamFrame';
 import type { Stream } from '../types';
 import type { Locale } from '../i18n';
 import { t } from '../i18n';
-import { buildLayout, toTemplate, toGridArea, type TemplateId } from '../utils/layout';
+import { buildLayout, toTemplate, toGridArea, resizeTracks, trackOffsets, type TemplateId, type ResolvedLayout } from '../utils/layout';
 
 interface StreamGridProps {
     streams: Stream[];
@@ -13,12 +13,18 @@ interface StreamGridProps {
     onRefreshStream: (id: string, handle: string) => Promise<void>;
     panelLayout?: 'default' | 'swapped';
     layoutTemplate?: TemplateId;
+    /** 保存済みのトラック幅を返す。本数が合わなければ null */
+    resolveTracks?: (base: ResolvedLayout) => { cols: number[]; rows: number[] } | null;
+    onTracksChange?: (tracks: { cols: number[]; rows: number[] }) => void;
 }
 
-const StreamGrid: React.FC<StreamGridProps> = ({ streams, setStreams, locale, onHide, onRefreshStream, panelLayout, layoutTemplate = 'auto' }) => {
+const StreamGrid: React.FC<StreamGridProps> = ({ streams, setStreams, locale, onHide, onRefreshStream, panelLayout, layoutTemplate = 'auto', resolveTracks, onTracksChange }) => {
     const [expandedId, setExpandedId] = useState<string | null>(null);
     const [draggingId, setDraggingId] = useState<string | null>(null);
     const [dragOverId, setDragOverId] = useState<string | null>(null);
+    /** 境界ドラッグ中の一時的なトラック幅。確定したら null に戻す */
+    const [liveTracks, setLiveTracks] = useState<{ cols: number[]; rows: number[] } | null>(null);
+    const [isResizing, setIsResizing] = useState(false);
     const [vpSize, setVpSize] = useState({ w: window.innerWidth, h: window.innerHeight });
 
     // Refs that don't need to trigger re-renders
@@ -121,6 +127,58 @@ const StreamGrid: React.FC<StreamGridProps> = ({ streams, setStreams, locale, on
         [layoutTemplate, streams.length, vpSize],
     );
 
+    // 実際に描くトラック幅: ドラッグ中の一時値 > 保存済み > テンプレートの既定
+    const saved = resolveTracks?.(layout) ?? null;
+    const colTracks = liveTracks?.cols ?? saved?.cols ?? layout.colTracks;
+    const rowTracks = liveTracks?.rows ?? saved?.rows ?? layout.rowTracks;
+
+    /**
+     * 境界ドラッグ。掴んだ瞬間の幅を基準に、移動量を fr に換算して配分する。
+     * 変えるのは grid-template-columns / rows の値だけなので DOM は動かない。
+     */
+    const handleResizeMouseDown = useCallback((
+        e: React.MouseEvent,
+        axis: 'col' | 'row',
+        index: number,
+    ) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const rect = gridRef.current?.getBoundingClientRect();
+        if (!rect) return;
+
+        const startPos = axis === 'col' ? e.clientX : e.clientY;
+        const sizePx = axis === 'col' ? rect.width : rect.height;
+        const baseCols = colTracks;
+        const baseRows = rowTracks;
+        const base = axis === 'col' ? baseCols : baseRows;
+        const totalFr = base.reduce((sum, f) => sum + f, 0);
+        if (sizePx <= 0 || totalFr <= 0) return;
+
+        setIsResizing(true);
+        let latest = { cols: baseCols, rows: baseRows };
+
+        const onMouseMove = (me: MouseEvent) => {
+            const deltaPx = (axis === 'col' ? me.clientX : me.clientY) - startPos;
+            const deltaFr = (deltaPx / sizePx) * totalFr;
+            const next = resizeTracks(base, index, deltaFr);
+            latest = axis === 'col'
+                ? { cols: next, rows: baseRows }
+                : { cols: baseCols, rows: next };
+            setLiveTracks(latest);
+        };
+
+        const onMouseUp = () => {
+            window.removeEventListener('mousemove', onMouseMove);
+            window.removeEventListener('mouseup', onMouseUp);
+            setIsResizing(false);
+            setLiveTracks(null);
+            onTracksChange?.(latest);
+        };
+
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onMouseUp);
+    }, [colTracks, rowTracks, onTracksChange]);
+
     /**
      * DOM上の並び順は domSeq（追加順）で固定し、視覚的な位置は CSS の order で表現する。
      *
@@ -190,8 +248,8 @@ const StreamGrid: React.FC<StreamGridProps> = ({ streams, setStreams, locale, on
                 className="stream-grid"
                 style={{
                     display: 'grid',
-                    gridTemplateColumns: toTemplate(layout.colTracks),
-                    gridTemplateRows: toTemplate(layout.rowTracks),
+                    gridTemplateColumns: toTemplate(colTracks),
+                    gridTemplateRows: toTemplate(rowTracks),
                     width: '100%',
                     height: '100%',
                     gap: isExpanded ? '0' : '3px',
@@ -218,10 +276,40 @@ const StreamGrid: React.FC<StreamGridProps> = ({ streams, setStreams, locale, on
                         />
                     </div>
                 ))}
+
+                {/* ── 境界ドラッグのハンドル ──
+                    **必ずすべてのセルより後ろに置くこと。** セルの間に差し込むと
+                    React がセルを insertBefore で動かし、iframe がリロードされる。
+                    末尾への追加ならセルは動かない。
+                    レイヤ自体は pointer-events: none で、ハンドルだけが反応する。 */}
+                {!isExpanded && (
+                    <div className="grid-resize-layer">
+                        {trackOffsets(colTracks).map((ratio, i) => (
+                            <div
+                                key={`col-${i}`}
+                                className="grid-resize-handle col"
+                                style={{ left: `${ratio * 100}%` }}
+                                onMouseDown={e => handleResizeMouseDown(e, 'col', i)}
+                                role="separator"
+                                aria-orientation="vertical"
+                            />
+                        ))}
+                        {trackOffsets(rowTracks).map((ratio, i) => (
+                            <div
+                                key={`row-${i}`}
+                                className="grid-resize-handle row"
+                                style={{ top: `${ratio * 100}%` }}
+                                onMouseDown={e => handleResizeMouseDown(e, 'row', i)}
+                                role="separator"
+                                aria-orientation="horizontal"
+                            />
+                        ))}
+                    </div>
+                )}
             </div>
 
             {/* Full-screen overlay during drag: blocks all iframes */}
-            {isDraggingAny && (
+            {(isDraggingAny || isResizing) && (
                 <div id="drag-global-overlay" className="drag-global-overlay" />
             )}
         </div>

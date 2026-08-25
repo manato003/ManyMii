@@ -8,7 +8,12 @@ import {
     parseLayoutStore,
     getTemplateFor,
     setTemplateFor,
+    setTracksFor,
+    tracksFor,
+    resizeTracks,
+    trackOffsets,
     MAIN_RATIO,
+    MIN_FR,
     type TemplateId,
     type Slot,
 } from './layout';
@@ -197,6 +202,119 @@ describe('calcOptimalGrid', () => {
     });
 });
 
+describe('resizeTracks', () => {
+    it('境界を動かすと片方が増え、もう片方が同じだけ減る', () => {
+        expect(resizeTracks([1, 1], 0, 0.5)).toEqual([1.5, 0.5]);
+    });
+
+    it('総和は変わらない', () => {
+        const before = [2, 1, 1];
+        const after = resizeTracks(before, 1, 0.4);
+        const sum = (a: number[]) => a.reduce((x, y) => x + y, 0);
+        expect(sum(after)).toBeCloseTo(sum(before));
+    });
+
+    it('隣り合うトラックだけが変わる', () => {
+        expect(resizeTracks([1, 1, 1], 1, 0.3)).toEqual([1, 1.3, 0.7]);
+    });
+
+    it('MIN_FR を下回らないところで止まる', () => {
+        // 右を 0 以下にしようとしても MIN_FR で止まる
+        const after = resizeTracks([1, 1], 0, 999);
+        expect(after[1]).toBeCloseTo(MIN_FR);
+        expect(after[0]).toBeCloseTo(2 - MIN_FR);
+    });
+
+    it('逆向きでも MIN_FR を下回らない', () => {
+        const after = resizeTracks([1, 1], 0, -999);
+        expect(after[0]).toBeCloseTo(MIN_FR);
+        expect(after[1]).toBeCloseTo(2 - MIN_FR);
+    });
+
+    it('範囲外の index では何もしない', () => {
+        const tracks = [1, 1];
+        expect(resizeTracks(tracks, -1, 0.5)).toBe(tracks);
+        expect(resizeTracks(tracks, 1, 0.5)).toBe(tracks);   // 右隣が無い
+        expect(resizeTracks(tracks, 5, 0.5)).toBe(tracks);
+    });
+
+    it('元の配列を変更しない', () => {
+        const tracks = [1, 1];
+        resizeTracks(tracks, 0, 0.5);
+        expect(tracks).toEqual([1, 1]);
+    });
+});
+
+describe('trackOffsets', () => {
+    it('境界の数はトラック数より1つ少ない', () => {
+        expect(trackOffsets([1, 1, 1])).toHaveLength(2);
+        expect(trackOffsets([1])).toHaveLength(0);
+    });
+
+    it('等分なら等間隔', () => {
+        const offsets = trackOffsets([1, 1, 1]);
+        expect(offsets[0]).toBeCloseTo(1 / 3);
+        expect(offsets[1]).toBeCloseTo(2 / 3);
+    });
+
+    it('比率に応じた位置になる', () => {
+        expect(trackOffsets([2, 1])[0]).toBeCloseTo(2 / 3);
+        expect(trackOffsets([1, 2])[0]).toBeCloseTo(1 / 3);
+    });
+
+    it('0 や空でも壊れない', () => {
+        expect(trackOffsets([])).toEqual([]);
+        expect(trackOffsets([0, 0])).toEqual([]);
+    });
+});
+
+describe('tracksFor', () => {
+    const base = buildLayout('main-left', 4, VP_W, VP_H);   // cols 2本 / rows 3本
+
+    it('保存が無ければ null', () => {
+        expect(tracksFor({}, 4, base)).toBeNull();
+    });
+
+    it('本数が一致すれば返す', () => {
+        const saved = { cols: [2.5, 0.5], rows: [1, 1, 1] };
+        const store = { 4: { templateId: 'main-left' as const, tracks: saved } };
+        expect(tracksFor(store, 4, base)).toEqual(saved);
+    });
+
+    // 本数が違うものを当てると区画とトラックがずれてレイアウトが崩れる
+    it('列の本数が違えば使わない', () => {
+        const store = { 4: { templateId: 'main-left' as const, tracks: { cols: [1, 1, 1], rows: [1, 1, 1] } } };
+        expect(tracksFor(store, 4, base)).toBeNull();
+    });
+
+    it('行の本数が違えば使わない', () => {
+        const store = { 4: { templateId: 'main-left' as const, tracks: { cols: [2, 1], rows: [1, 1] } } };
+        expect(tracksFor(store, 4, base)).toBeNull();
+    });
+});
+
+describe('setTracksFor', () => {
+    it('テンプレートを維持したまま幅を保存する', () => {
+        const store = setTemplateFor({}, 4, 'main-top');
+        const next = setTracksFor(store, 4, { cols: [1, 1, 1], rows: [3, 1] });
+        expect(next[4].templateId).toBe('main-top');
+        expect(next[4].tracks).toEqual({ cols: [1, 1, 1], rows: [3, 1] });
+    });
+
+    // テンプレートを変えると列数・行数が変わるので、古い幅は残してはいけない
+    it('テンプレートを変えると保存済みの幅が破棄される', () => {
+        const withTracks = setTracksFor(setTemplateFor({}, 4, 'main-top'), 4, { cols: [1, 1, 1], rows: [3, 1] });
+        const switched = setTemplateFor(withTracks, 4, 'main-left');
+        expect(switched[4].tracks).toBeUndefined();
+    });
+
+    it('元のストアを変更しない', () => {
+        const store = setTemplateFor({}, 4, 'auto');
+        setTracksFor(store, 4, { cols: [1, 1], rows: [1, 1] });
+        expect(store[4].tracks).toBeUndefined();
+    });
+});
+
 describe('parseLayoutStore', () => {
     it('正常な JSON を復元する', () => {
         const raw = JSON.stringify({ 4: { templateId: 'main-left' } });
@@ -220,6 +338,34 @@ describe('parseLayoutStore', () => {
     it('未知のテンプレート名を持つエントリは捨てる', () => {
         const raw = JSON.stringify({ 3: { templateId: 'diagonal' }, 4: { templateId: 'auto' } });
         expect(parseLayoutStore(raw)).toEqual({ 4: { templateId: 'auto' } });
+    });
+
+    it('保存された tracks を復元する', () => {
+        const raw = JSON.stringify({ 4: { templateId: 'main-left', tracks: { cols: [2.5, 0.5], rows: [1, 1, 1] } } });
+        expect(parseLayoutStore(raw)[4].tracks).toEqual({ cols: [2.5, 0.5], rows: [1, 1, 1] });
+    });
+
+    // 片方だけ当てると区画とトラックがずれる。中途半端に適用しない
+    it('cols と rows の片方だけが壊れていたら tracks ごと捨てる', () => {
+        const raw = JSON.stringify({ 4: { templateId: 'auto', tracks: { cols: [1, 1], rows: 'broken' } } });
+        const parsed = parseLayoutStore(raw);
+        expect(parsed[4].templateId).toBe('auto');       // テンプレートは残す
+        expect(parsed[4].tracks).toBeUndefined();
+    });
+
+    it('MIN_FR を下回る値を含む tracks は捨てる', () => {
+        const raw = JSON.stringify({ 4: { templateId: 'auto', tracks: { cols: [0, 2], rows: [1, 1] } } });
+        expect(parseLayoutStore(raw)[4].tracks).toBeUndefined();
+    });
+
+    it('数値でない値を含む tracks は捨てる', () => {
+        const raw = JSON.stringify({ 4: { templateId: 'auto', tracks: { cols: [1, null], rows: [1, 1] } } });
+        expect(parseLayoutStore(raw)[4].tracks).toBeUndefined();
+    });
+
+    it('空配列の tracks は捨てる', () => {
+        const raw = JSON.stringify({ 4: { templateId: 'auto', tracks: { cols: [], rows: [] } } });
+        expect(parseLayoutStore(raw)[4].tracks).toBeUndefined();
     });
 
     it('枠数として不正なキーは捨てる', () => {

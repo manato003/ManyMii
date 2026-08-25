@@ -433,7 +433,7 @@ function App() {
   const visibleStreams = useMemo(() => streams.filter(s => !s.hidden), [streams]);
 
   // レイアウトは「見えている枠の数」に紐づける。非表示の枠はグリッドに出ないため
-  const { templateId: layoutTemplate, setTemplate: setLayoutTemplate } = useStreamLayout(visibleStreams.length);
+  const { templateId: layoutTemplate, setTemplate: setLayoutTemplate, setTracks: setLayoutTracks, resolveTracks: resolveLayoutTracks } = useStreamLayout(visibleStreams.length);
 
   // 再確認の対象になる枠（YouTubeチャンネル枠でライブ中でないもの）
   const offlineChannelCount = useMemo(
@@ -529,6 +529,8 @@ function App() {
           onRefreshStream={handleRefreshStream}
           panelLayout={settings.panelLayout}
           layoutTemplate={layoutTemplate}
+          resolveTracks={resolveLayoutTracks}
+          onTracksChange={setLayoutTracks}
         />
         <ChatSidePanel
             streams={streams}

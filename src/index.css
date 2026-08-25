@@ -216,6 +216,8 @@ body {
 .stream-grid {
   background: #000;
   flex: 1;
+  /* 境界ドラッグのハンドル層（.grid-resize-layer）の基準にする */
+  position: relative;
 }
 
 .stream-grid-empty {
@@ -271,6 +273,50 @@ body {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
   z-index: 5;
+}
+
+/* ── 境界ドラッグのハンドル ──
+   グリッドの上に敷いたレイヤ。セルの間には絶対に入れない（DOM が動くと
+   iframe がリロードされる）。レイヤは素通しで、ハンドルだけが反応する。 */
+.grid-resize-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 6;
+}
+
+/* 既定では見えない（設計思想1）。掴める幅は最小限にして、
+   iframe 側のコントロールを覆わないようにする。 */
+.grid-resize-handle {
+  position: absolute;
+  pointer-events: auto;
+  opacity: 0;
+  background: var(--accent);
+  transition: opacity 0.12s;
+}
+
+.grid-resize-handle.col {
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  margin-left: -3.5px;
+  cursor: col-resize;
+}
+
+.grid-resize-handle.row {
+  left: 0;
+  right: 0;
+  height: 7px;
+  margin-top: -3.5px;
+  cursor: row-resize;
+}
+
+.stream-grid-container:hover .grid-resize-handle {
+  opacity: 0.25;
+}
+
+.stream-grid-container .grid-resize-handle:hover {
+  opacity: 1;
 }
 
 /* 拡大表示。要素を差し替えるのではなく、同じコンテナのまま余白だけ落とす。

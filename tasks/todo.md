@@ -136,10 +136,18 @@ DOM順序を domSeq で固定し CSS の order で視覚位置を表現するよ
 あわせてタイトルの紫→ピンクのグラデーション文字を廃止した（設計思想10）。
 `.app-title` / `.side-panel-title` / `.chat-panel-title` の3箇所。
 
-**未変更（意図的）**:
+リポジトリ名も改名済み (2026-08-25): `manato003/multistream-app` →
+`manato003/ManyMii`。旧URLからは GitHub が 301 を張るのでリンクは切れない。
+Vercel のプロジェクト名も `manymii` に変更済み。
 
-- GitHub リポジトリ名と Vercel のプロジェクト名は `multistream-app` のまま。
-  変えると公開URL `multistream-app-eta.vercel.app` が変わり、共有済みのリンクが切れる
+**未変更**:
+
+- **公開URLは `multistream-app-eta.vercel.app` のまま。** Vercel はプロジェクト改名後も
+  旧称から自動生成したドメインを割り当てたまま保持しており、結果として
+  共有済みリンクが生きている。`manymii.vercel.app` は未割り当て（404）。
+  欲しければ Settings → Domains から追加する。**その場合も旧ドメインは
+  外さないこと**（外した瞬間に共有済みリンクが切れる）
+- ローカルの作業フォルダは `C:\Dev\projects\multistream-app` のまま
 - パネル端の 1px の `border-image` グラデーション（4箇所）は残してある。
   文字ではなく細い装飾なので slop 感が薄い。気になるなら別途判断する
 - og:image は未設定（画像を用意していないため）

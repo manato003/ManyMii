@@ -7,7 +7,7 @@ UI は普段隠れているので視聴領域が最大化されます。
 
 **公開URL: https://multistream-app-eta.vercel.app**
 
-<sub>リポジトリ名とデプロイ先のURLは旧称 `multistream-app` のままです。変更すると共有済みのリンクが切れるため。</sub>
+<sub>公開URLのホスト名は Vercel が旧称から自動生成したものが残っています。既に共有したリンクを切らないため、そのまま使っています。</sub>
 
 ---
 

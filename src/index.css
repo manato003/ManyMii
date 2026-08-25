@@ -273,15 +273,12 @@ body {
   z-index: 5;
 }
 
-.expanded-mode {
-  width: 100vw;
-  height: 100vh;
+/* 拡大表示。要素を差し替えるのではなく、同じコンテナのまま余白だけ落とす。
+   グリッド側は対象セルを grid-area: 1/1/-1/-1 にし、他を display:none にする
+   （StreamGrid の cellPlacement）。iframe を破棄しないので復帰時に
+   再読み込みされない。 */
+.stream-grid-container.is-expanded {
   padding: 0;
-}
-
-.expanded-cell {
-  width: 100%;
-  height: 100%;
 }
 
 /* Global overlay: covers ALL iframes during drag to prevent event steal */

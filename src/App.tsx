@@ -4,6 +4,7 @@ import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import './index.css';
 import './side-panel.css';
 import StreamGrid from './components/StreamGrid';
+import { useStreamLayout } from './hooks/useStreamLayout';
 import StreamSidePanel from './components/StreamSidePanel';
 import ChatSidePanel from './components/ChatSidePanel';
 import AddStreamModal from './components/AddStreamModal';
@@ -431,6 +432,9 @@ function App() {
 
   const visibleStreams = useMemo(() => streams.filter(s => !s.hidden), [streams]);
 
+  // レイアウトは「見えている枠の数」に紐づける。非表示の枠はグリッドに出ないため
+  const { templateId: layoutTemplate, setTemplate: setLayoutTemplate } = useStreamLayout(visibleStreams.length);
+
   // 再確認の対象になる枠（YouTubeチャンネル枠でライブ中でないもの）
   const offlineChannelCount = useMemo(
     () => streams.filter(s => s.channelHandle && s.isLive !== true).length,
@@ -513,6 +517,9 @@ function App() {
           onAddStreamToFavorites={handleAddStreamToFavorites}
           offlineChannelCount={offlineChannelCount}
           onRefreshOffline={handleRefreshOffline}
+          layoutTemplate={layoutTemplate}
+          onLayoutChange={setLayoutTemplate}
+          layoutStreamCount={visibleStreams.length}
         />
         <StreamGrid
           streams={visibleStreams}
@@ -521,6 +528,7 @@ function App() {
           onHide={handleToggleHidden}
           onRefreshStream={handleRefreshStream}
           panelLayout={settings.panelLayout}
+          layoutTemplate={layoutTemplate}
         />
         <ChatSidePanel
             streams={streams}

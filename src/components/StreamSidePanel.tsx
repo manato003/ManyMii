@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
-import { EyeOff, Eye, Plus, X, Clock, GripVertical, ChevronRight, Star, FolderPlus, Pin, PinOff, ArrowRight, Trash2, RefreshCw } from 'lucide-react';
+import { EyeOff, Eye, Plus, X, Clock, GripVertical, ChevronRight, Star, FolderPlus, Pin, PinOff, ArrowRight, Trash2, RefreshCw, LayoutGrid, LayoutPanelLeft, LayoutPanelTop } from 'lucide-react';
 import type { Stream, FavoriteNode } from '../types';
 import { toDisplayName } from '../types';
 import type { Locale } from '../i18n';
@@ -10,6 +10,17 @@ import { useHoverPanel } from '../hooks/useHoverPanel';
 import { useResizable } from '../hooks/useResizable';
 import { PlatformIcon } from './PlatformIcon';
 import FavoritesTree from './FavoritesTree';
+import { availableTemplates, type TemplateId } from '../utils/layout';
+
+// ── レイアウト選択 ──
+
+/** main-right は main-left のアイコンを左右反転して使う（lucide に鏡像が無い） */
+const LAYOUT_CHOICES: { id: TemplateId; Icon: typeof LayoutGrid; flip?: boolean; ja: string; en: string }[] = [
+    { id: 'auto', Icon: LayoutGrid, ja: '等分', en: 'Even' },
+    { id: 'main-left', Icon: LayoutPanelLeft, ja: 'メイン左', en: 'Main left' },
+    { id: 'main-right', Icon: LayoutPanelLeft, flip: true, ja: 'メイン右', en: 'Main right' },
+    { id: 'main-top', Icon: LayoutPanelTop, ja: 'メイン上', en: 'Main top' },
+];
 
 // ── セクション折りたたみ永続化 ──
 
@@ -58,6 +69,11 @@ interface StreamSidePanelProps {
     /** ライブ状態を再確認できる枠の数（0 のときボタンは無効） */
     offlineChannelCount: number;
     onRefreshOffline: () => void;
+    /** 選択中のレイアウト */
+    layoutTemplate: TemplateId;
+    onLayoutChange: (id: TemplateId) => void;
+    /** グリッドに出ている枠の数。選べるレイアウトがこれで決まる */
+    layoutStreamCount: number;
 }
 
 const StreamSidePanel: React.FC<StreamSidePanelProps> = ({
@@ -69,6 +85,7 @@ const StreamSidePanel: React.FC<StreamSidePanelProps> = ({
     isPinned = false, onPinChange, getFavFolders,
     onAddStreamToFavorites,
     offlineChannelCount, onRefreshOffline,
+    layoutTemplate, onLayoutChange, layoutStreamCount,
 }) => {
     const { visible, show, scheduleHide } = useHoverPanel({ hideDelay, idleTimeout: 5000, isPinned });
 
@@ -341,7 +358,33 @@ const StreamSidePanel: React.FC<StreamSidePanelProps> = ({
                     </span>
                 </div>
 
+                {/* ── 上段: レイアウト選択 ──
+                    パネルは「上段=見え方 / 下段=配信の管理」の2段構成。
+                    2枠未満では メイン+サブ が成立しないので出さない。 */}
+                {layoutStreamCount >= 2 && (
+                    <div className="side-panel-layout">
+                        <span className="side-panel-layout-label">{label('レイアウト', 'Layout')}</span>
+                        <div className="side-panel-layout-choices">
+                            {LAYOUT_CHOICES
+                                .filter(c => availableTemplates(layoutStreamCount).includes(c.id))
+                                .map(({ id, Icon, flip, ja, en }) => (
+                                    <button
+                                        key={id}
+                                        className={`layout-choice${layoutTemplate === id ? ' active' : ''}`}
+                                        onClick={() => onLayoutChange(id)}
+                                        title={label(ja, en)}
+                                        aria-label={label(ja, en)}
+                                        aria-pressed={layoutTemplate === id}
+                                    >
+                                        <Icon size={15} style={flip ? { transform: 'scaleX(-1)' } : undefined} />
+                                    </button>
+                                ))}
+                        </div>
+                    </div>
+                )}
+
                 <div className="side-panel-list">
+                    {/* ── 下段: 配信の管理 ── */}
                     {/* ── 追加済セクション（常時展開） ── */}
                     {streams.length > 0 && (
                         <div className="side-panel-section-label">{label('追加済', 'Active')}</div>

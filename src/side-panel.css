@@ -128,6 +128,52 @@
   color: var(--text-secondary);
 }
 
+/* ── 上段: レイアウト選択 ──
+   パネルは「上段=見え方 / 下段=配信の管理」の2段構成。
+   下段のリストと責務が違うので、区切り線を入れて段として分ける。 */
+.side-panel-layout {
+  flex-shrink: 0;
+  padding: 8px 12px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.side-panel-layout-label {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 0.65rem;
+  color: var(--text-secondary);
+}
+
+.side-panel-layout-choices {
+  display: flex;
+  gap: 4px;
+}
+
+.layout-choice {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 0;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.1s, border-color 0.1s, color 0.1s;
+}
+
+.layout-choice:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+}
+
+.layout-choice.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(139, 92, 246, 0.12);
+}
+
 .side-panel-list {
   flex: 1;
   overflow-y: auto;

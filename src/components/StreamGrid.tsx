@@ -3,6 +3,7 @@ import StreamFrame from './StreamFrame';
 import type { Stream } from '../types';
 import type { Locale } from '../i18n';
 import { t } from '../i18n';
+import { buildLayout, toTemplate, toGridArea, type TemplateId } from '../utils/layout';
 
 interface StreamGridProps {
     streams: Stream[];
@@ -11,30 +12,10 @@ interface StreamGridProps {
     onHide: (id: string) => void;
     onRefreshStream: (id: string, handle: string) => Promise<void>;
     panelLayout?: 'default' | 'swapped';
+    layoutTemplate?: TemplateId;
 }
 
-function calcOptimalGrid(count: number, vpW: number, vpH: number) {
-    if (count <= 0) return { cols: 1, rows: 1 };
-    let bestCols = 1;
-    let bestScore = 0;
-    for (let cols = 1; cols <= count; cols++) {
-        const rows = Math.ceil(count / cols);
-        let cellW = vpW / cols;
-        let cellH = cellW * 9 / 16;
-        if (cellH * rows > vpH) {
-            cellH = vpH / rows;
-            cellW = cellH * 16 / 9;
-        }
-        const score = cellW * cellH * count;
-        if (score > bestScore) {
-            bestScore = score;
-            bestCols = cols;
-        }
-    }
-    return { cols: bestCols, rows: Math.ceil(count / bestCols) };
-}
-
-const StreamGrid: React.FC<StreamGridProps> = ({ streams, setStreams, locale, onHide, onRefreshStream, panelLayout }) => {
+const StreamGrid: React.FC<StreamGridProps> = ({ streams, setStreams, locale, onHide, onRefreshStream, panelLayout, layoutTemplate = 'auto' }) => {
     const [expandedId, setExpandedId] = useState<string | null>(null);
     const [draggingId, setDraggingId] = useState<string | null>(null);
     const [dragOverId, setDragOverId] = useState<string | null>(null);
@@ -135,9 +116,9 @@ const StreamGrid: React.FC<StreamGridProps> = ({ streams, setStreams, locale, on
     }, [setStreams]);
 
     // ── Grid calculation ─────────────────────────────────────────────────────
-    const { cols, rows } = useMemo(
-        () => calcOptimalGrid(streams.length, vpSize.w, vpSize.h),
-        [streams.length, vpSize]
+    const layout = useMemo(
+        () => buildLayout(layoutTemplate, streams.length, vpSize.w, vpSize.h),
+        [layoutTemplate, streams.length, vpSize],
     );
 
     /**
@@ -183,44 +164,37 @@ const StreamGrid: React.FC<StreamGridProps> = ({ streams, setStreams, locale, on
         );
     }
 
-    if (expandedId) {
-        const expanded = streams.find(s => s.id === expandedId);
-        if (expanded) {
-            return (
-                <div className="stream-grid-container expanded-mode">
-                    <div className="stream-grid-cell expanded-cell">
-                        <StreamFrame
-                            key={expanded.id}
-                            stream={expanded}
-                            onRemove={removeStream}
-                            locale={locale}
-                            onToggleExpand={toggleExpand}
-                            onDragHandleMouseDown={handleDragHandleMouseDown}
-                            isDragging={false}
-                            isDragTarget={false}
-                            onHide={onHide}
-                            onRefreshStream={onRefreshStream}
-                        />
-                    </div>
-                </div>
-            );
-        }
-    }
-
     const isDraggingAny = draggingId !== null;
 
+    // 拡大は「別のツリー」ではなく「1枠が全マスを占めるレイアウト」として扱う。
+    // 別ツリーを返すと対象以外の StreamFrame がアンマウントされ、復帰時に
+    // 全枠がリロードされる。ここは CSS だけで切り替えること。
+    // 隠した枠は display:none にするだけなので iframe は生きたまま＝音は鳴り続ける
+    // （tasks/layout-requirements.md の決定事項）。
+    const isExpanded = expandedId !== null && streams.some(s => s.id === expandedId);
+
+    /** その枠に与えるグリッド上の位置。拡大中は対象が全面、他は非表示 */
+    const cellPlacement = (streamId: string, visualIndex: number): React.CSSProperties => {
+        if (isExpanded) {
+            return streamId === expandedId
+                ? { gridArea: '1 / 1 / -1 / -1' }
+                : { display: 'none' };
+        }
+        return toGridArea(layout.slots[visualIndex] ?? { col: 1, row: 1, colSpan: 1, rowSpan: 1 });
+    };
+
     return (
-        <div className={`stream-grid-container${isDraggingAny ? ' is-dragging' : ''}`}>
+        <div className={`stream-grid-container${isDraggingAny ? ' is-dragging' : ''}${isExpanded ? ' is-expanded' : ''}`}>
             <div
                 ref={gridRef}
                 className="stream-grid"
                 style={{
                     display: 'grid',
-                    gridTemplateColumns: `repeat(${cols}, 1fr)`,
-                    gridTemplateRows: `repeat(${rows}, 1fr)`,
+                    gridTemplateColumns: toTemplate(layout.colTracks),
+                    gridTemplateRows: toTemplate(layout.rowTracks),
                     width: '100%',
                     height: '100%',
-                    gap: '3px',
+                    gap: isExpanded ? '0' : '3px',
                 }}
             >
                 {domOrdered.map(({ stream, visualIndex }) => (
@@ -228,7 +202,7 @@ const StreamGrid: React.FC<StreamGridProps> = ({ streams, setStreams, locale, on
                         key={stream.id}
                         className={`stream-grid-cell${dragOverId === stream.id && draggingId !== stream.id ? ' drag-over' : ''}`}
                         data-stream-id={stream.id}
-                        style={{ order: visualIndex }}
+                        style={cellPlacement(stream.id, visualIndex)}
                     >
                         <StreamFrame
                             key={stream.id}

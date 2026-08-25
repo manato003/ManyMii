@@ -74,6 +74,7 @@ interface Stream {
 | `chatPinned` / `streamPinned` | 各パネルのピン留め |
 | `panelSections` | 配信管理パネルのセクション折りたたみ |
 | `streamPanelWidth` | 配信管理パネルの幅 |
+| `streamLayouts` | レイアウトの選択（枠数ごと）。消えても既定に戻るだけ |
 | `resolveCache` | ライブ解決結果のキャッシュ（3章参照）。消えても動作に影響しない |
 
 すべて自動保存。明示的な「保存」操作は存在しない。
@@ -203,8 +204,38 @@ YouTubeはプロキシ経由のリクエストに対し、**200 を返しなが�
 `calcOptimalGrid(count, vpW, vpH)` が 1〜count 列を総当たりし、16:9 を保ったときの
 セル面積が最大になる列数を選ぶ。
 
-- ダブルクリックで対象枠を全画面に拡大（`expandedId`）
+- ダブルクリックで対象枠を全画面に拡大（`expandedId`）。
+  **別のツリーを返さず、対象セルを `grid-area: 1 / 1 / -1 / -1`、他を `display:none`
+  にするだけ。** iframe を破棄しないので復帰時にリロードされない。
+  代償として、隠れている枠の音声は鳴り続ける（意図的）
 - 非表示にした枠はグリッドから外れる（iframe がアンマウントされ再生も止まる）
+
+### レイアウト
+
+`utils/layout.ts` の `buildLayout(templateId, count, vpW, vpH)` が
+列・行のトラック（`fr` 値）と、各枠が入る区画（`Slot`）を返す。
+
+| テンプレート | 内容 | 条件 |
+|---|---|---|
+| `auto` | `calcOptimalGrid()` による等分（既定） | 常に |
+| `main-left` / `main-right` | 大きい1枠 + 残りを縦1列 | 2枠以上 |
+| `main-top` | 上に大きい1枠 + 残りを横1列 | 2枠以上 |
+
+`main-*` は「メイン1 + 残り n」なので**枠数ごとの定義を持たず、枠数から生成する**。
+適用できないテンプレートが渡されたら `auto` に落ちる（枠を減らしたときに壊れないため）。
+
+**事後条件: `slots.length === count`。** 足りないとセルが自動配置に落ちて
+意図しない位置に飛ぶ。テストで固定してある。
+
+選択は配信管理パネル上段（`side-panel-layout`）。パネルは
+「上段=見え方 / 下段=配信の管理」の2段構成。
+**どの配信をメイン枠に置くかは既存のドラッグ入れ替えで決まる**
+（配列の先頭がスロット0＝メイン）。専用の操作は持たない。
+
+状態は `localStorage` の `streamLayouts` に**枠数ごと**に保存する
+（4枠→5枠→4枠と戻ったときに復元されるため）。共有コードには含めない。
+
+未実装: 境界ドラッグによる比率の微調整。`tasks/layout-requirements.md` 参照。
 
 ### DOM順序を変えない
 
@@ -344,6 +375,7 @@ npm run test:watch
 | `utils/resolveChannelId.test.ts` | node | `parseChannelPage` / `parseWatchPage`（YouTubeのHTML構造依存） |
 | `utils/favoriteTree.test.ts` | node | ツリー操作。特に**サブツリー消失**と深度制限 |
 | `utils/resolveCache.test.ts` | node | TTL の境界、期限切れの掃除、上限超過時の破棄順 |
+| `utils/layout.test.ts` | node | 区画数・範囲・重なりの不変条件、保存値の復元 |
 | `hooks/useHoverPanel.test.tsx` | jsdom | ホバー表示・遅延非表示・アイドル・**ピン留め** |
 | `components/ChatSidePanel.test.tsx` | jsdom | フックへの配線、チャンネル選択の解決 |
 | `components/AddStreamModal.test.tsx` | jsdom | ペーストボタンの配線と失敗時の表示 |

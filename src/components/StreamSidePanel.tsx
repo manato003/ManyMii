@@ -20,7 +20,8 @@ const LAYOUT_CHOICES: { id: TemplateId; Icon: typeof LayoutGrid; flip?: boolean;
     { id: 'main-left', Icon: LayoutPanelLeft, ja: 'メイン左', en: 'Main left' },
     { id: 'main-right', Icon: LayoutPanelLeft, flip: true, ja: 'メイン右', en: 'Main right' },
     { id: 'main-top', Icon: LayoutPanelTop, ja: 'メイン上', en: 'Main top' },
-    { id: 'l-shape', Icon: LayoutDashboard, ja: 'L字', en: 'L-shape' },
+    { id: 'l-shape', Icon: LayoutDashboard, ja: 'L字 左上', en: 'L-shape (left)' },
+    { id: 'l-shape-right', Icon: LayoutDashboard, flip: true, ja: 'L字 右上', en: 'L-shape (right)' },
 ];
 
 // ── セクション折りたたみ永続化 ──

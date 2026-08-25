@@ -3,7 +3,7 @@ import StreamFrame from './StreamFrame';
 import type { Stream } from '../types';
 import type { Locale } from '../i18n';
 import { t } from '../i18n';
-import { buildLayout, toTemplate, toGridArea, resizeTracks, trackOffsets, type TemplateId, type ResolvedLayout } from '../utils/layout';
+import { buildLayout, toTemplate, toGridArea, resizeTracks, buildHandleSegments, type TemplateId, type ResolvedLayout } from '../utils/layout';
 
 interface StreamGridProps {
     streams: Stream[];
@@ -284,22 +284,30 @@ const StreamGrid: React.FC<StreamGridProps> = ({ streams, setStreams, locale, on
                     レイヤ自体は pointer-events: none で、ハンドルだけが反応する。 */}
                 {!isExpanded && (
                     <div className="grid-resize-layer">
-                        {trackOffsets(colTracks).map((ratio, i) => (
+                        {buildHandleSegments(layout.slots, colTracks, rowTracks, 'col').map((h, n) => (
                             <div
-                                key={`col-${i}`}
+                                key={`col-${n}`}
                                 className="grid-resize-handle col"
-                                style={{ left: `${ratio * 100}%` }}
-                                onMouseDown={e => handleResizeMouseDown(e, 'col', i)}
+                                style={{
+                                    left: `${h.position * 100}%`,
+                                    top: `${h.start * 100}%`,
+                                    height: `${h.length * 100}%`,
+                                }}
+                                onMouseDown={e => handleResizeMouseDown(e, 'col', h.index)}
                                 role="separator"
                                 aria-orientation="vertical"
                             />
                         ))}
-                        {trackOffsets(rowTracks).map((ratio, i) => (
+                        {buildHandleSegments(layout.slots, colTracks, rowTracks, 'row').map((h, n) => (
                             <div
-                                key={`row-${i}`}
+                                key={`row-${n}`}
                                 className="grid-resize-handle row"
-                                style={{ top: `${ratio * 100}%` }}
-                                onMouseDown={e => handleResizeMouseDown(e, 'row', i)}
+                                style={{
+                                    top: `${h.position * 100}%`,
+                                    left: `${h.start * 100}%`,
+                                    width: `${h.length * 100}%`,
+                                }}
+                                onMouseDown={e => handleResizeMouseDown(e, 'row', h.index)}
                                 role="separator"
                                 aria-orientation="horizontal"
                             />

@@ -12,6 +12,7 @@ import {
     tracksFor,
     resizeTracks,
     trackOffsets,
+    buildHandleSegments,
     pickLShapeGrid,
     EMPTY_LAYOUT_STORE,
     MAIN_RATIO,
@@ -24,7 +25,7 @@ import {
 const VP_W = 1920;
 const VP_H = 1080;
 
-const ALL: TemplateId[] = ['auto', 'main-left', 'main-right', 'main-top', 'l-shape'];
+const ALL: TemplateId[] = ['auto', 'main-left', 'main-right', 'main-top', 'l-shape', 'l-shape-right'];
 
 /** 区画が占めるマスの集合。重なりと範囲の検証に使う */
 function cellsOf(slot: Slot): string[] {
@@ -223,8 +224,13 @@ describe('resizeTracks', () => {
         expect(sum(after)).toBeCloseTo(sum(before));
     });
 
-    it('隣り合うトラックだけが変わる', () => {
-        expect(resizeTracks([1, 1, 1], 1, 0.3)).toEqual([1, 1.3, 0.7]);
+    // 以前は隣り合う2本だけを変えていたが、それだと片側が極端に潰れる。
+    // いまは境界の左右それぞれの全トラックに比例配分する
+    it('境界の両側すべてに配分される', () => {
+        const after = resizeTracks([1, 1, 1], 1, 0.3);
+        expect(after[0]).toBeCloseTo(1.15);
+        expect(after[1]).toBeCloseTo(1.15);
+        expect(after[2]).toBeCloseTo(0.7);
     });
 
     it('MIN_FR を下回らないところで止まる', () => {
@@ -251,6 +257,111 @@ describe('resizeTracks', () => {
         const tracks = [1, 1];
         resizeTracks(tracks, 0, 0.5);
         expect(tracks).toEqual([1, 1]);
+    });
+});
+
+describe('resizeTracks の比例配分', () => {
+    // 隣の1本だけで delta を吸収させると、そこだけが極端に潰れる
+    it('右側が複数あるとき、負担を全体で分け合う', () => {
+        const after = resizeTracks([1, 1, 1], 0, 0.6);
+        expect(after[0]).toBeCloseTo(1.6);
+        expect(after[1]).toBeCloseTo(0.7);
+        expect(after[2]).toBeCloseTo(0.7);
+    });
+
+    it('左側が複数あるとき、増分を全体で分け合う', () => {
+        const after = resizeTracks([1, 1, 1], 1, 0.6);
+        expect(after[0]).toBeCloseTo(1.3);
+        expect(after[1]).toBeCloseTo(1.3);
+        expect(after[2]).toBeCloseTo(0.4);
+    });
+
+    it('元の比率を保ったまま伸縮する', () => {
+        const after = resizeTracks([1, 2, 1], 0, 0.5);
+        // 右側は 2:1 の比率を保つ
+        expect(after[1] / after[2]).toBeCloseTo(2);
+    });
+
+    it('どのトラックも MIN_FR を下回らない', () => {
+        const after = resizeTracks([1, 1, 1], 0, 999);
+        for (const f of after) expect(f).toBeGreaterThanOrEqual(MIN_FR - 1e-9);
+    });
+
+    it('逆向きに振り切っても MIN_FR を下回らない', () => {
+        const after = resizeTracks([1, 1, 1], 1, -999);
+        for (const f of after) expect(f).toBeGreaterThanOrEqual(MIN_FR - 1e-9);
+    });
+
+    // 限界は「平均」ではなく「一番小さいトラック」で決めないと、
+    // 幅がばらついているときに小さい方だけが MIN_FR を割る
+    it('幅がばらついていても、一番小さいトラックが MIN_FR を守る', () => {
+        for (const tracks of [[2, 0.5, 1], [1, 3, 0.4], [0.5, 0.5, 4]]) {
+            for (const index of [0, 1]) {
+                for (const delta of [999, -999]) {
+                    const after = resizeTracks(tracks, index, delta);
+                    for (const f of after) expect(f).toBeGreaterThanOrEqual(MIN_FR - 1e-9);
+                }
+            }
+        }
+    });
+});
+
+describe('buildHandleSegments', () => {
+    const l = buildLayout('l-shape', 8, VP_W, VP_H);   // 4x4、メインは 3x3
+
+    it('等分レイアウトでは境界が全長にわたる', () => {
+        const a = buildLayout('auto', 4, VP_W, VP_H);
+        const segs = buildHandleSegments(a.slots, a.colTracks, a.rowTracks, 'col');
+        expect(segs).toHaveLength(1);
+        expect(segs[0].start).toBeCloseTo(0);
+        expect(segs[0].length).toBeCloseTo(1);
+    });
+
+    // メインの内側を通る境界に全長のハンドルを引くと、映像の上を線が縦断し、
+    // 掴んでも下段の枠しか動かないので意図と結果がずれる
+    it('L字ではメイン内側の境界が下段の区間だけになる', () => {
+        const segs = buildHandleSegments(l.slots, l.colTracks, l.rowTracks, 'col');
+        const inner = segs.filter(s => s.index < 2);
+        expect(inner).toHaveLength(2);
+        for (const s of inner) {
+            expect(s.start).toBeCloseTo(0.75);   // 下段の開始位置
+            expect(s.length).toBeCloseTo(0.25);  // 下段1行ぶん
+        }
+    });
+
+    it('L字のメインとサブ列の境界は全高にわたる', () => {
+        const segs = buildHandleSegments(l.slots, l.colTracks, l.rowTracks, 'col');
+        const outer = segs.find(s => s.index === 2);
+        expect(outer?.start).toBeCloseTo(0);
+        expect(outer?.length).toBeCloseTo(1);
+    });
+
+    it('行方向も同じ規則になる', () => {
+        const segs = buildHandleSegments(l.slots, l.colTracks, l.rowTracks, 'row');
+        expect(segs.filter(s => s.index < 2).every(s => Math.abs(s.length - 0.25) < 1e-9)).toBe(true);
+        expect(segs.find(s => s.index === 2)?.length).toBeCloseTo(1);
+    });
+
+    it('区間はグリッドの範囲に収まる', () => {
+        for (const id of ALL) {
+            for (let n = 2; n <= 12; n++) {
+                const layout = buildLayout(id, n, VP_W, VP_H);
+                for (const axis of ['col', 'row'] as const) {
+                    for (const s of buildHandleSegments(layout.slots, layout.colTracks, layout.rowTracks, axis)) {
+                        expect(s.position).toBeGreaterThan(0);
+                        expect(s.position).toBeLessThan(1);
+                        expect(s.start).toBeGreaterThanOrEqual(-1e-9);
+                        expect(s.start + s.length).toBeLessThanOrEqual(1 + 1e-9);
+                        expect(s.length).toBeGreaterThan(0);
+                    }
+                }
+            }
+        }
+    });
+
+    it('1本しかないトラックには境界が無い', () => {
+        const one = buildLayout('auto', 1, VP_W, VP_H);
+        expect(buildHandleSegments(one.slots, one.colTracks, one.rowTracks, 'col')).toEqual([]);
     });
 });
 
@@ -496,6 +607,27 @@ describe('l-shape', () => {
     it('5枠未満では選べない', () => {
         expect(availableTemplates(4)).not.toContain('l-shape');
         expect(availableTemplates(5)).toContain('l-shape');
+    });
+
+    it('右上版はメインとサブ列が左右反転する', () => {
+        const left = buildLayout('l-shape', 8, VP_W, VP_H);
+        const right = buildLayout('l-shape-right', 8, VP_W, VP_H);
+        // 左上版: メインが col1、サブ列が col4（右端）
+        expect(left.slots[0].col).toBe(1);
+        expect(left.slots[1].col).toBe(4);
+        // 右上版: メインが col2、サブ列が col1（左端）
+        expect(right.slots[0].col).toBe(2);
+        expect(right.slots[1].col).toBe(1);
+        // グリッドの大きさとメインの占有マス数は同じ
+        expect(right.colTracks).toEqual(left.colTracks);
+        expect(right.slots[0].colSpan).toBe(left.slots[0].colSpan);
+        expect(right.slots[0].rowSpan).toBe(left.slots[0].rowSpan);
+    });
+
+    it('右上版でも下段は左端から並ぶ', () => {
+        const { slots } = buildLayout('l-shape-right', 8, VP_W, VP_H);
+        expect(slots.slice(4).map(s => s.col)).toEqual([1, 2, 3, 4]);
+        expect(slots.slice(4).every(s => s.row === 4)).toBe(true);
     });
 });
 

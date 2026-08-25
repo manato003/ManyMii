@@ -308,8 +308,6 @@ body {
 }
 
 .grid-resize-handle.col {
-  top: 0;
-  bottom: 0;
   width: 9px;
   margin-left: -4.5px;
   cursor: col-resize;
@@ -321,12 +319,11 @@ body {
   left: 50%;
   width: 3px;
   height: 34px;
+  max-height: 50%;
   transform: translate(-50%, -50%);
 }
 
 .grid-resize-handle.row {
-  left: 0;
-  right: 0;
   height: 9px;
   margin-top: -4.5px;
   cursor: row-resize;
@@ -336,6 +333,7 @@ body {
   top: 50%;
   left: 50%;
   width: 34px;
+  max-width: 50%;
   height: 3px;
   transform: translate(-50%, -50%);
 }

@@ -11,7 +11,7 @@
  * ここは純粋関数だけを置く。React にも DOM にも依存しない。
  */
 
-export type TemplateId = 'auto' | 'main-left' | 'main-right' | 'main-top' | 'l-shape';
+export type TemplateId = 'auto' | 'main-left' | 'main-right' | 'main-top' | 'l-shape' | 'l-shape-right';
 
 /** 動画の縦横比。黒帯を最小にするための目標値 */
 const TARGET_ASPECT = 16 / 9;
@@ -63,13 +63,13 @@ export function calcOptimalGrid(count: number, vpW: number, vpH: number): { cols
 /**
  * その枠数で選べるテンプレート。
  * main-* は「メイン1 + 残り」なので2枠以上でないと成立しない。
- * l-shape は右列と下段の両方にサブが要り、かつメインが2マス以上を占める必要があるので5枠から。
+ * l-shape* は縦列と下段の両方にサブが要り、かつメインが2マス以上を占める必要があるので5枠から。
  */
 export function availableTemplates(count: number): TemplateId[] {
     if (count < 2) return ['auto'];
     // l-shape は 4枠だとメインが1マスになりサブと同じ大きさになってしまうので5枠から
     if (count < 5) return ['auto', 'main-left', 'main-right', 'main-top'];
-    return ['auto', 'main-left', 'main-right', 'main-top', 'l-shape'];
+    return ['auto', 'main-left', 'main-right', 'main-top', 'l-shape', 'l-shape-right'];
 }
 
 /**
@@ -154,15 +154,20 @@ export function buildLayout(
             return { colTracks, rowTracks: Array<number>(subs).fill(1), slots };
         }
 
-        case 'l-shape': {
-            // 左上にメイン、右列と下段にサブを L 字に並べる
+        case 'l-shape':
+        case 'l-shape-right': {
+            // 上端にメイン、縦の1列と下段にサブを L 字に並べる。
+            // メインが左上なら縦列は右端、右上なら縦列は左端に来る（鏡像）。
+            const mainLeft = id === 'l-shape';
             const { cols, rows } = pickLShapeGrid(count, vpW, vpH);
+            const subCol = mainLeft ? cols : 1;
+            const mainCol = mainLeft ? 1 : 2;
             const slots: Slot[] = [
-                { col: 1, row: 1, colSpan: cols - 1, rowSpan: rows - 1 },
+                { col: mainCol, row: 1, colSpan: cols - 1, rowSpan: rows - 1 },
             ];
-            // 右の列を上から
+            // 縦の列を上から
             for (let r = 1; r <= rows - 1; r++) {
-                slots.push({ col: cols, row: r, colSpan: 1, rowSpan: 1 });
+                slots.push({ col: subCol, row: r, colSpan: 1, rowSpan: 1 });
             }
             // 下の段を左から
             for (let c = 1; c <= cols; c++) {
@@ -215,28 +220,131 @@ export function buildLayout(
 export const MIN_FR = 0.3;
 
 /**
- * `index` 番目と `index + 1` 番目の境界を動かす。
- * 総和は変えない（片方に足した分をもう片方から引く）ので、
- * グリッド全体の大きさは変わらない。
+ * `index` 番目と `index + 1` 番目の間にあるグリッド線を動かす。
  *
- * 最小値に張り付いたらそれ以上は動かさない。元の配列は変更しない。
+ * **影響は片側1本ではなく、その側のトラック全体に比例配分する。**
+ * 隣の1本だけで delta を吸収させると、そこだけが極端に潰れて
+ * 他は不動という不自然な動きになる。
+ *
+ *   [1, 1, 1] の境界0 を +0.6
+ *     隣だけ:   [1.6, 0.4, 1.0]   ← 2列目だけが潰れる
+ *     比例配分: [1.6, 0.7, 0.7]   ← 右側全体で均等に負担する
+ *
+ * 総和は変えないのでグリッド全体の大きさは不変。
+ * どのトラックも MIN_FR を下回らない範囲に delta を丸める。
+ * 元の配列は変更しない。
  */
 export function resizeTracks(tracks: number[], index: number, deltaFr: number): number[] {
     if (index < 0 || index + 1 >= tracks.length) return tracks;
-    const a = tracks[index];
-    const b = tracks[index + 1];
-    // 両側が MIN_FR を下回らない範囲に delta を丸める
-    const clamped = Math.max(MIN_FR - a, Math.min(b - MIN_FR, deltaFr));
-    if (clamped === 0) return tracks;
-    const next = [...tracks];
-    next[index] = a + clamped;
-    next[index + 1] = b - clamped;
-    return next;
+
+    const left = tracks.slice(0, index + 1);
+    const right = tracks.slice(index + 1);
+    const leftSum = left.reduce((a, b) => a + b, 0);
+    const rightSum = right.reduce((a, b) => a + b, 0);
+    if (leftSum <= 0 || rightSum <= 0) return tracks;
+
+    // 比例縮小したときに最小のトラックが MIN_FR を割らない範囲を求める。
+    // 左を s 倍すると最小値は minLeft * s なので、s >= MIN_FR / minLeft。
+    const minLeft = Math.min(...left);
+    const minRight = Math.min(...right);
+    const dMin = leftSum * (MIN_FR / minLeft - 1);      // 左を縮められる限界（負値）
+    const dMax = rightSum * (1 - MIN_FR / minRight);    // 右を縮められる限界（正値）
+    const d = Math.max(dMin, Math.min(dMax, deltaFr));
+    if (d === 0) return tracks;
+
+    const leftScale = (leftSum + d) / leftSum;
+    const rightScale = (rightSum - d) / rightSum;
+    return [
+        ...left.map(f => f * leftScale),
+        ...right.map(f => f * rightScale),
+    ];
+}
+
+/** リサイズハンドル1本ぶんの位置。すべて 0〜1 の比率 */
+export interface HandleSegment {
+    /** resizeTracks に渡すトラックの index */
+    index: number;
+    /** 境界の位置（列なら左からの距離、行なら上からの距離） */
+    position: number;
+    /** 境界に沿った方向の開始位置 */
+    start: number;
+    /** 境界に沿った方向の長さ */
+    length: number;
+}
+
+/**
+ * リサイズハンドルを描く区間を求める。
+ *
+ * **グリッド線の全長にハンドルを引いてはいけない。** 例えば L字レイアウトでは
+ * 列の境界の多くがメイン枠の内側を通っており、そこを掴んでも下段の枠しか動かない。
+ * 線がメインの映像を縦断するうえ、掴んだ場所と動く場所が一致せず意図が伝わらない。
+ *
+ * そこで**実際に別々の枠が接している区間だけ**を返す。
+ * 判定は単純で、境界の両隣のマスが違う枠に属していればそこは境目。
+ */
+export function buildHandleSegments(
+    slots: Slot[],
+    colTracks: number[],
+    rowTracks: number[],
+    axis: 'col' | 'row',
+): HandleSegment[] {
+    const cols = colTracks.length;
+    const rows = rowTracks.length;
+
+    // マス (col,row) がどの枠に属するか。未使用は -1
+    const owner = new Int32Array(cols * rows).fill(-1);
+    slots.forEach((s, i) => {
+        for (let c = s.col; c < s.col + s.colSpan; c++) {
+            for (let r = s.row; r < s.row + s.rowSpan; r++) {
+                if (c >= 1 && c <= cols && r >= 1 && r <= rows) owner[(r - 1) * cols + (c - 1)] = i;
+            }
+        }
+    });
+    const at = (c: number, r: number) => owner[(r - 1) * cols + (c - 1)];
+
+    const main = axis === 'col' ? colTracks : rowTracks;
+    const cross = axis === 'col' ? rowTracks : colTracks;
+    const mainTotal = main.reduce((a, b) => a + b, 0);
+    const crossTotal = cross.reduce((a, b) => a + b, 0);
+    if (mainTotal <= 0 || crossTotal <= 0) return [];
+
+    // cross 方向の累積比率（先頭に 0 を置く）
+    const crossOffset: number[] = [0];
+    for (const f of cross) crossOffset.push(crossOffset[crossOffset.length - 1] + f / crossTotal);
+
+    const out: HandleSegment[] = [];
+    let mainAcc = 0;
+
+    for (let i = 0; i < main.length - 1; i++) {
+        mainAcc += main[i];
+        const position = mainAcc / mainTotal;
+        const a = i + 1;        // 境界の手前のトラック（1-based）
+        const b = i + 2;        // 奥のトラック
+
+        // cross 方向に走査して、境目になっている連続区間を拾う
+        let runStart = -1;
+        for (let k = 1; k <= cross.length; k++) {
+            const left = axis === 'col' ? at(a, k) : at(k, a);
+            const right = axis === 'col' ? at(b, k) : at(k, b);
+            const isEdge = left !== right;
+            if (isEdge && runStart === -1) runStart = k;
+            if ((!isEdge || k === cross.length) && runStart !== -1) {
+                const endExclusive = isEdge ? k : k - 1;
+                out.push({
+                    index: i,
+                    position,
+                    start: crossOffset[runStart - 1],
+                    length: crossOffset[endExclusive] - crossOffset[runStart - 1],
+                });
+                runStart = -1;
+            }
+        }
+    }
+    return out;
 }
 
 /**
  * 各境界の位置を 0〜1 の比率で返す。長さは `tracks.length - 1`。
- * ハンドルを置く座標に使う。
  */
 export function trackOffsets(tracks: number[]): number[] {
     const total = tracks.reduce((sum, f) => sum + f, 0);

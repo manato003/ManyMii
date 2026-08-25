@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { MessageSquare, Pin, ChevronDown } from 'lucide-react';
+import { MessageSquare, Pin, PinOff, ChevronDown } from 'lucide-react';
 import type { Stream } from '../types';
 import { toDisplayName } from '../types';
 import type { Locale } from '../i18n';
@@ -79,12 +79,15 @@ const ChatSidePanel: React.FC<ChatSidePanelProps> = ({ streams, locale, isPinned
                     <span className="chat-panel-title">
                         {label('コメント', 'Chat')}
                     </span>
+                    {/* 配信管理パネルのピンと見た目・挙動を揃える。
+                        .side-panel-pin がスタイル、.chat-panel-pin が配置を担当 */}
                     <button
-                        className={`chat-panel-pin${isPinned ? ' active' : ''}`}
+                        className={`side-panel-pin chat-panel-pin${isPinned ? ' active' : ''}`}
                         onClick={() => onPinChange(!isPinned)}
                         title={isPinned ? label('ピン解除', 'Unpin') : label('ピン留め', 'Pin')}
+                        aria-label={isPinned ? label('ピン解除', 'Unpin') : label('ピン留め', 'Pin')}
                     >
-                        <Pin size={13} />
+                        {isPinned ? <PinOff size={13} /> : <Pin size={13} />}
                     </button>
                 </div>
 

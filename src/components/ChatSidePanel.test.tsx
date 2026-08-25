@@ -127,6 +127,33 @@ describe('ChatSidePanel のチャンネル選択', () => {
         expect(container.querySelector('iframe')).toBeNull();
     });
 
+    it('ピン留めボタンは配信管理パネルと同じスタイルクラスを使う', () => {
+        // .side-panel-pin を外すと見た目だけが片方ずれるので、ここで固定する
+        const { container } = setup(true, [twitch]);
+        const pin = container.querySelector('.chat-panel-pin') as HTMLElement;
+        expect(pin.classList.contains('side-panel-pin')).toBe(true);
+    });
+
+    it('ピン留めの状態でアイコンと aria-label が切り替わる', () => {
+        const pinned = render(
+            <ChatSidePanel streams={[twitch]} locale="ja" isPinned onPinChange={() => {}} hideDelay={HIDE_DELAY} />,
+        );
+        const pinnedBtn = pinned.container.querySelector('.chat-panel-pin') as HTMLElement;
+        expect(pinnedBtn.getAttribute('aria-label')).toBe('ピン解除');
+        expect(pinnedBtn.classList.contains('active')).toBe(true);
+        const pinnedIcon = pinnedBtn.querySelector('svg')?.getAttribute('class');
+
+        const unpinned = render(
+            <ChatSidePanel streams={[twitch]} locale="ja" isPinned={false} onPinChange={() => {}} hideDelay={HIDE_DELAY} />,
+        );
+        const unpinnedBtn = unpinned.container.querySelector('.chat-panel-pin') as HTMLElement;
+        expect(unpinnedBtn.getAttribute('aria-label')).toBe('ピン留め');
+        expect(unpinnedBtn.classList.contains('active')).toBe(false);
+
+        // Pin と PinOff で別のアイコンが出ていること
+        expect(unpinnedBtn.querySelector('svg')?.getAttribute('class')).not.toBe(pinnedIcon);
+    });
+
     it('ピン留めボタンのクリックで onPinChange が反転値で呼ばれる', () => {
         const onPinChange = vi.fn();
         const { container } = render(

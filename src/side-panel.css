@@ -728,29 +728,14 @@
    マウスの導線が中央⇔画面端であること、ブラウザの縦タブが画面端の
    ホバーに反応することの両方を避けるため。
    チャットパネルは既定で右側 → ピンは左（order: -1）。
-   swapped（.left）で左側に来たときだけ右に戻す。 */
+   swapped（.left）で左側に来たときだけ右に戻す。
+
+   見た目は配信管理パネルと同じ .side-panel-pin を併用し、こちらは
+   配置だけを担当する。スタイルを二重に持つと、片方だけ直したときに
+   両パネルの見た目がずれる。 */
 .chat-panel-pin {
   order: -1;
   margin-right: auto;
-  background: transparent;
-  border: none;
-  color: var(--text-secondary);
-  cursor: pointer;
-  padding: 3px 4px;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-  transition: color 0.1s, background 0.1s;
-}
-
-.chat-panel-pin:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: var(--text-primary);
-}
-
-.chat-panel-pin.active {
-  color: var(--accent);
 }
 
 .chat-panel.left .chat-panel-pin {

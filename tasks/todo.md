@@ -112,9 +112,11 @@ DOM順序を domSeq で固定し CSS の order で視覚位置を表現するよ
 `i18n.ts` の `t()` と、各コンポーネントでローカル定義している `label(ja, en)` が混在。
 `label` は5ファイルで再定義されている。どちらかに寄せる。
 
-### TSX 内の生カラーコード
-`AddStreamModal`（`#f87171` `#f59e0b` `#22c55e`）、`ChatSidePanel`（`#8b5cf6`）、
-`TwitchPlayer`（`#94a3b8`）。`--success` / `--warning` を CSS 変数に追加して置き換える。
+### TSX 内の生カラーコード — 一部対応済み (2026-08-25)
+`--warning` / `--success` を CSS 変数に追加し、`AddStreamModal` の
+`#f87171` `#f59e0b` `#22c55e` を置き換えた。
+
+残り: `ChatSidePanel`（`#8b5cf6`）、`TwitchPlayer`（`#94a3b8`）。
 `PlatformIcon` のブランド色（`#FF0000` / `#9146FF`）は例外でよい。
 
 ---

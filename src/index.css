@@ -7,12 +7,25 @@
   --accent-hover: #7c3aed;
   --border: #1e293b;
   --danger: #ef4444;
+  --warning: #f59e0b;
+  --success: #22c55e;
 }
 
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+}
+
+/* フォーム要素は font-family を継承しない。指定しないとボタンや入力欄の
+   ラベルだけブラウザ既定フォント（Arial など）で描かれ、隣接するアイコンや
+   本文から浮いて見える。font ごと継承すると各所の font-size 指定を
+   潰してしまうので、font-family だけを継承させる。 */
+button,
+input,
+textarea,
+select {
+  font-family: inherit;
 }
 
 body {
@@ -806,21 +819,100 @@ body {
   box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.15);
 }
 
+/* フォームの操作ボタン。
+   button は font-family を継承しないので明示すること。指定しないと
+   ラベルだけブラウザ既定フォントで描かれ、隣のアイコンから浮いて見える。
+   border は透明でも必ず 1px 取る。枠線のある .paste-btn と並べたとき、
+   これがないと 2px ぶん高さがずれる。 */
 .add-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   background: var(--accent);
   color: #fff;
-  border: none;
+  border: 1px solid var(--accent);
   padding: 7px 14px;
   border-radius: 6px;
+  font-family: inherit;
   font-weight: 600;
   font-size: 0.8rem;
+  line-height: 1;
   cursor: pointer;
   white-space: nowrap;
-  transition: background 0.12s;
+  transition: background 0.12s, border-color 0.12s, opacity 0.12s;
 }
 
-.add-btn:hover {
+.add-btn:hover:not(:disabled) {
   background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.add-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* 横幅いっぱいに伸ばす版（まとめて追加） */
+.add-btn--block {
+  flex: 1;
+}
+
+/* 貼り付けは主操作（追加）の手前に置く補助操作なので、accent は使わず
+   枠線だけのボタンにして主従を保つ。高さ・角丸・フォントは .add-btn と揃える。 */
+.paste-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  padding: 7px 14px;
+  border-radius: 6px;
+  font-family: inherit;
+  font-weight: 600;
+  font-size: 0.8rem;
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.paste-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+/* アイコンだけのボタンは正方形にして、貼り付けと追加の重さを揃える。
+   横 padding が違うままだと、同じ役割の並びなのに片方だけ細く見える。 */
+.input-row .add-btn,
+.input-row .paste-btn,
+.bulk-actions .paste-btn {
+  width: 36px;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.bulk-actions {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.bulk-result {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  color: var(--success);
+  white-space: nowrap;
+}
+
+.bulk-result.has-skipped {
+  color: var(--warning);
 }
 
 .form-divider {

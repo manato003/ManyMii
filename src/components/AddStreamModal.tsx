@@ -260,7 +260,7 @@ const AddStreamModal: React.FC<AddStreamModalProps> = ({ onClose, onAdd, locale,
                         </button>
                     </div>
                     {resolveError && (
-                        <p style={{ fontSize: '0.72rem', color: '#f87171', marginTop: '4px' }}>
+                        <p style={{ fontSize: '0.72rem', color: 'var(--danger)', marginTop: '4px' }}>
                             {resolveError}
                         </p>
                     )}
@@ -288,26 +288,25 @@ const AddStreamModal: React.FC<AddStreamModalProps> = ({ onClose, onAdd, locale,
                             {bulkError}
                         </p>
                     )}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
+                    <div className="bulk-actions">
                         <button
                             className="paste-btn"
                             onClick={() => { void pasteBulk(); }}
                             title={locale === 'ja' ? 'クリップボードから貼り付け' : 'Paste from clipboard'}
                             aria-label={locale === 'ja' ? 'クリップボードから貼り付け' : 'Paste from clipboard'}
                         >
-                            <ClipboardPaste size={13} />
+                            <ClipboardPaste size={14} />
                         </button>
                         <button
-                            className="add-btn"
-                            style={{ flex: 1, justifyContent: 'center', display: 'flex', gap: '5px' }}
+                            className="add-btn add-btn--block"
                             onClick={addBulk}
                             disabled={!bulkInput.trim()}
                         >
-                            <Plus size={13} />
-                            {locale === 'ja' ? 'まとめて追加' : 'Add All'}
+                            <Plus size={14} />
+                            <span>{locale === 'ja' ? 'まとめて追加' : 'Add All'}</span>
                         </button>
                         {bulkResults && (
-                            <span style={{ fontSize: '0.72rem', color: bulkResults.fail > 0 ? '#f59e0b' : '#22c55e', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <span className={`bulk-result${bulkResults.fail > 0 ? ' has-skipped' : ''}`}>
                                 <CheckCircle size={12} />
                                 {locale === 'ja'
                                     ? `${bulkResults.ok}件追加${bulkResults.fail > 0 ? `、${bulkResults.fail}件スキップ` : ''}`

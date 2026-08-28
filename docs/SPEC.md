@@ -487,6 +487,7 @@ npm run test:watch
 | `hooks/useHoverPanel.test.tsx` | jsdom | ホバー表示・遅延非表示・アイドル・**ピン留め** |
 | `components/ChatSidePanel.test.tsx` | jsdom | フックへの配線、チャンネル選択の解決 |
 | `components/AddStreamModal.test.tsx` | jsdom | ペーストボタンの配線と失敗時の表示 |
+| `app-main-padding.test.tsx` | jsdom | **スタイルシートのカスケード**（ピン留め時の余白） |
 
 **フィクスチャには実際に踏んだ罠を埋め込むこと。** 例えば watch ページのフィクスチャは
 `videoPrimaryInfoRenderer`（動画タイトル）を `videoOwnerRenderer` より先に配置してある。

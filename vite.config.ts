@@ -9,5 +9,8 @@ export default defineConfig({
     // DOM が要るテストはファイル先頭に `// @vitest-environment jsdom` を書く。
     environment: 'node',
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    // CSS を実際に読み込ませる。既定ではスタブ化されて ?raw が空文字になり、
+    // スタイルシートのカスケードを検証するテストが書けない
+    css: true,
   },
 })

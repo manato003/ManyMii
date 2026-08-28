@@ -131,34 +131,6 @@ export function collectChannelIds(tree: FavoriteNode[], out: Set<string>) {
     }
 }
 
-/** 同じ親配列内の2要素をスワップ */
-export function swapInArray(arr: FavoriteNode[], fromId: string, toId: string): FavoriteNode[] {
-    const result = [...arr];
-    const fi = result.findIndex(n => n.id === fromId);
-    const ti = result.findIndex(n => n.id === toId);
-    if (fi === -1 || ti === -1) return arr;
-    [result[fi], result[ti]] = [result[ti], result[fi]];
-    return result;
-}
-
-/** ツリー内で同一親の並べ替え */
-export function reorderInTree(tree: FavoriteNode[], fromId: string, toId: string): FavoriteNode[] {
-    // まずルート直下を試す
-    const fi = tree.findIndex(n => n.id === fromId);
-    const ti = tree.findIndex(n => n.id === toId);
-    if (fi !== -1 && ti !== -1) return swapInArray(tree, fromId, toId);
-
-    // フォルダ内を再帰
-    return tree.map(n => {
-        if (n.kind === 'folder') {
-            return { ...n, children: reorderInTree(n.children, fromId, toId) };
-        }
-        return n;
-    });
-}
-
-
-
 export function applyDisplayName(
     tree: FavoriteNode[],
     type: 'youtube' | 'twitch',
@@ -182,33 +154,114 @@ export function applyDisplayName(
     return { tree: changed ? next : tree, changed };
 }
 
+/** ノードの親フォルダ ID。ルート直下なら null、ツリーに無ければ undefined */
+export function findParentId(
+    tree: FavoriteNode[],
+    id: string,
+    parent: string | null = null,
+): string | null | undefined {
+    for (const node of tree) {
+        if (node.id === id) return parent;
+        if (node.kind === 'folder') {
+            const found = findParentId(node.children, id, node.id);
+            if (found !== undefined) return found;
+        }
+    }
+    return undefined;
+}
+
 /**
- * ノードを別フォルダへ移動する。移動できない場合は元のツリーをそのまま返す。
+ * nodeId を targetFolderId の直下へ移動してよいか。
  *
- * 移動先が自分自身の子孫だと findAndRemove で移動先ごと切り離されてしまい、
- * insertInto が親を見つけられずサブツリーが丸ごと消える。存在確認で防ぐ。
+ * ドロップ可否の見た目（ハイライトを出すか）と実際の移動で同じ判定を使うため、
+ * 移動処理から切り出してある。**判定と実行がずれると「光ったのに動かない」**
+ * という一番たちの悪い挙動になる。
+ */
+export function canMoveInto(
+    tree: FavoriteNode[],
+    nodeId: string,
+    targetFolderId: string | null,
+): boolean {
+    if (nodeId === targetFolderId) return false;
+
+    const [cleaned, removed] = findAndRemove(tree, nodeId);
+    if (!removed) return false;
+
+    // 移動先が自分の子孫だと findAndRemove で一緒に切り離されるので、
+    // cleaned の中に残っていないことで検出できる
+    if (targetFolderId !== null && !hasFolder(cleaned, targetFolderId)) return false;
+
+    // フォルダ移動時は MAX_DEPTH を超えないことを保証する
+    // （UI 側のサブフォルダ追加ボタン非表示だけではドラッグ経由で破れるため）
+    if (removed.kind === 'folder') {
+        const targetDepth = targetFolderId === null ? -1 : getDepth(cleaned, targetFolderId);
+        if (targetDepth === -1 && targetFolderId !== null) return false;
+        if (targetDepth + 1 + folderHeight(removed) > MAX_DEPTH - 1) return false;
+    }
+    return true;
+}
+
+/**
+ * ノードを別フォルダの末尾へ移動する。移動できない場合は元のツリーをそのまま返す。
+ * targetFolderId が null ならルート直下へ。
  */
 export function moveNodeInTree(
     tree: FavoriteNode[],
     nodeId: string,
     targetFolderId: string | null,
 ): FavoriteNode[] {
-    if (nodeId === targetFolderId) return tree;
+    if (!canMoveInto(tree, nodeId, targetFolderId)) return tree;
+    const [cleaned, removed] = findAndRemove(tree, nodeId);
+    if (!removed) return tree;
+    return insertInto(cleaned, targetFolderId, removed);
+}
+
+/** targetId を含む配列の、その位置に node を差し込む */
+function insertRelative(
+    tree: FavoriteNode[],
+    parentId: string | null,
+    targetId: string,
+    position: 'before' | 'after',
+    node: FavoriteNode,
+): FavoriteNode[] {
+    const put = (arr: FavoriteNode[]): FavoriteNode[] => {
+        const i = arr.findIndex(n => n.id === targetId);
+        if (i === -1) return arr;
+        const next = [...arr];
+        next.splice(position === 'before' ? i : i + 1, 0, node);
+        return next;
+    };
+
+    if (parentId === null) return put(tree);
+    return tree.map(n => {
+        if (n.kind !== 'folder') return n;
+        if (n.id === parentId) return { ...n, children: put(n.children) };
+        return { ...n, children: insertRelative(n.children, parentId, targetId, position, node) };
+    });
+}
+
+/**
+ * targetId の直前／直後へ移動する。**親をまたいでもよい。**
+ *
+ * 入れ替え（swap）ではなく挿入にしてあるのは、
+ * 「A を C に落としたら C B A になる」という直感に反する動きを避けるため。
+ * これによりルート直下の項目の前後に落とすだけで階層を上げられる。
+ */
+export function moveNodeRelative(
+    tree: FavoriteNode[],
+    nodeId: string,
+    targetId: string,
+    position: 'before' | 'after',
+): FavoriteNode[] {
+    if (nodeId === targetId) return tree;
+
+    const parentId = findParentId(tree, targetId);
+    if (parentId === undefined) return tree;          // 移動先が存在しない
+    if (!canMoveInto(tree, nodeId, parentId)) return tree;
 
     const [cleaned, removed] = findAndRemove(tree, nodeId);
     if (!removed) return tree;
-
-    if (targetFolderId !== null && !hasFolder(cleaned, targetFolderId)) return tree;
-
-    // フォルダ移動時は MAX_DEPTH を超えないことを保証する
-    // （UI 側のサブフォルダ追加ボタン非表示だけではドラッグ経由で破れるため）
-    if (removed.kind === 'folder') {
-        const targetDepth = targetFolderId === null ? -1 : getDepth(cleaned, targetFolderId);
-        if (targetDepth === -1 && targetFolderId !== null) return tree;
-        if (targetDepth + 1 + folderHeight(removed) > MAX_DEPTH - 1) return tree;
-    }
-
-    return insertInto(cleaned, targetFolderId, removed);
+    return insertRelative(cleaned, parentId, targetId, position, removed);
 }
 
 /** フォルダを作成する。深度制限を超える場合は元のツリーをそのまま返す */

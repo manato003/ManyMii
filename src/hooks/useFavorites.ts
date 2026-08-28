@@ -4,7 +4,7 @@ import {
     findAndRemove,
     insertInto,
     updateNode,
-    reorderInTree,
+    moveNodeRelative,
     moveNodeInTree,
     createFolderInTree,
     applyDisplayName,
@@ -44,7 +44,8 @@ export interface FavoriteActions {
     renameFolder: (folderId: string, newName: string) => void;
     moveNode: (nodeId: string, targetFolderId: string | null) => void;
     toggleCollapse: (folderId: string) => void;
-    reorderInParent: (fromId: string, toId: string) => void;
+    /** targetId の直前／直後へ移動する。親をまたいでもよい */
+    moveRelative: (nodeId: string, targetId: string, position: 'before' | 'after') => void;
     setDisplayName: (type: 'youtube' | 'twitch', sourceId: string, displayName: string) => void;
 }
 
@@ -102,8 +103,8 @@ export function useFavorites() {
         ));
     }, [persist]);
 
-    const reorderInParent = useCallback((fromId: string, toId: string) => {
-        persist(prev => reorderInTree(prev, fromId, toId));
+    const moveRelative = useCallback((nodeId: string, targetId: string, position: 'before' | 'after') => {
+        persist(prev => moveNodeRelative(prev, nodeId, targetId, position));
     }, [persist]);
 
     /** 表示名が後から判明したときにお気に入り側へも反映する */
@@ -141,8 +142,8 @@ export function useFavorites() {
 
     const actions: FavoriteActions = useMemo(() => ({
         addChannel, removeNode, createFolder, renameFolder,
-        moveNode, toggleCollapse, reorderInParent, setDisplayName,
-    }), [addChannel, removeNode, createFolder, renameFolder, moveNode, toggleCollapse, reorderInParent, setDisplayName]);
+        moveNode, toggleCollapse, moveRelative, setDisplayName,
+    }), [addChannel, removeNode, createFolder, renameFolder, moveNode, toggleCollapse, moveRelative, setDisplayName]);
 
     return { tree, allChannelIds, getAllFolders, actions, importTree };
 }

@@ -398,6 +398,7 @@
 }
 
 .fav-folder-header {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -482,6 +483,7 @@
 }
 
 .fav-channel-item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -499,12 +501,6 @@
 
 .fav-channel-item.is-dragging-item {
   opacity: 0.35;
-}
-
-.fav-channel-item.is-drag-target {
-  background: rgba(139, 92, 246, 0.18);
-  border-radius: 4px;
-  outline: 1px solid rgba(139, 92, 246, 0.4);
 }
 
 .fav-channel-title {
@@ -580,7 +576,7 @@
 
 /* ===== クロスセクションドロップターゲット ===== */
 
-.fav-folder.is-cross-drop-target > .fav-folder-header {
+.fav-folder-header.is-cross-drop-target {
   background: rgba(139, 92, 246, 0.22);
   border-radius: 4px;
   outline: 2px solid rgba(139, 92, 246, 0.5);
@@ -697,7 +693,7 @@
 }
 
 
-.fav-folder.is-folder-drop-target > .fav-folder-header {
+.fav-folder-header.is-folder-drop-target {
   background: rgba(139, 92, 246, 0.15);
   border-radius: 4px;
   outline: 1px solid rgba(139, 92, 246, 0.3);
@@ -929,4 +925,55 @@
 
 .chat-panel.left.visible {
   transform: translateX(0);
+}
+
+/* ===== ツリーのドラッグ＆ドロップ ===== */
+
+/* 挿入位置を示す線。**どこに落ちるかを落とす前に見せる**のが狙い。
+   フォルダの中に入れる場合は行そのものがハイライトされる（is-folder-drop-target）。 */
+.fav-channel-item.drop-before::after,
+.fav-channel-item.drop-after::after,
+.fav-folder-header.drop-before::after,
+.fav-folder-header.drop-after::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 1px;
+  pointer-events: none;
+}
+
+.fav-channel-item.drop-before::after,
+.fav-folder-header.drop-before::after {
+  top: -1px;
+}
+
+.fav-channel-item.drop-after::after,
+.fav-folder-header.drop-after::after {
+  bottom: -1px;
+}
+
+/* ルートへ戻すためのドロップ先。ドラッグ中だけ現れる */
+.fav-root-drop {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  margin: 4px 6px 2px;
+  padding: 7px 8px;
+  border: 1px dashed var(--border);
+  border-radius: 5px;
+  color: var(--text-secondary);
+  font-size: 0.66rem;
+  text-align: center;
+  transition: background 0.1s, border-color 0.1s, color 0.1s;
+}
+
+.fav-root-drop.active {
+  background: rgba(139, 92, 246, 0.15);
+  border-color: var(--accent);
+  border-style: solid;
+  color: var(--text-primary);
 }

@@ -62,6 +62,26 @@ interface Stream {
 お気に入りは `FavoriteFolder | FavoriteChannel` の再帰ツリー。**フォルダは2階層まで**
 （`MAX_DEPTH = 2`）。ドラッグ移動でもこの制限と循環参照の防止が働く。
 
+#### ツリーのドラッグ＆ドロップ
+
+**落とした「行の中の位置」でドロップ先の意味が変わる。**
+
+| 行 | 上端 | 中央 | 下端 |
+|---|---|---|---|
+| フォルダ | 前に挿入 | **フォルダの中へ** | 後ろに挿入 |
+| チャンネル | 前に挿入（上半分） | — | 後ろに挿入（下半分） |
+
+「前後に挿入」があることで、**ルート直下の項目の前後に落とすだけで階層を上げられる**。
+これが無いと子要素をルートへ戻す手段が無くなる（実際にそういう不具合があった）。
+ドラッグ中だけ出る `fav-root-drop` が明示的なルート移動先も兼ねる。
+
+- 移動は**入れ替えではなく挿入**（`moveNodeRelative`）。入れ替えだと
+  「A を C に落としたら C B A」になり直感に反する
+- **ドロップ可否の判定（ハイライト）と実際の移動で `canMoveInto` を共有する。**
+  ずれると「光ったのに動かない」という一番わかりにくい挙動になる
+- ドラッグ状態は**ツリーのルートが1つだけ持ち**、各階層へ配る。
+  階層ごとに持つと、別の階層の行にドロップ線が出ない
+
 ### localStorage
 
 | キー | 内容 |
@@ -335,7 +355,10 @@ CSS の `order` で表現する。** `streams` 配列の順序をそのまま DO
 |---|---|---|
 | 配信グリッド | `StreamGrid.tsx` 内 | `data-stream-id` |
 | パネル内リスト | `useDragReorder.ts` | `data-stream-id` / `data-history-id` |
-| お気に入りツリー | `FavoritesTree.tsx` 内 | `data-fav-id` / `data-folder-drop` |
+| お気に入りツリー | `FavoritesTree.tsx` 内 | `data-fav-row` / `data-fav-folder` / `data-fav-root-drop` |
+
+<sub>`data-folder-drop` はお気に入りツリーにも残っているが、こちらは
+**履歴からフォルダへのクロスドロップ**（`useDragReorder`）が使う。</sub>
 
 グリッドのドラッグ中は `#drag-global-overlay` で全 iframe を覆い、
 `elementFromPoint` の直前だけ一時的に非表示にして下の要素を拾う。
@@ -451,6 +474,7 @@ npm run test:watch
 | `utils/favoriteTree.test.ts` | node | ツリー操作。特に**サブツリー消失**と深度制限 |
 | `utils/resolveCache.test.ts` | node | TTL の境界、期限切れの掃除、上限超過時の破棄順 |
 | `utils/layout.test.ts` | node | 区画数・範囲・重なりの不変条件、保存値の復元 |
+| `utils/favoriteTree.test.ts` | node | 移動の可否判定、挿入位置、**ノードを失わないこと** |
 | `hooks/useHoverPanel.test.tsx` | jsdom | ホバー表示・遅延非表示・アイドル・**ピン留め** |
 | `components/ChatSidePanel.test.tsx` | jsdom | フックへの配線、チャンネル選択の解決 |
 | `components/AddStreamModal.test.tsx` | jsdom | ペーストボタンの配線と失敗時の表示 |

@@ -5,7 +5,9 @@ import {
     createFolderInTree,
     findAndRemove,
     insertInto,
-    reorderInTree,
+    moveNodeRelative,
+    canMoveInto,
+    findParentId,
     applyDisplayName,
     collectChannelsFromFolder,
     collectChannelIds,
@@ -114,15 +116,138 @@ describe('findAndRemove / insertInto', () => {
     });
 });
 
-describe('reorderInTree', () => {
-    it('同じ親の中で入れ替える', () => {
-        const next = reorderInTree([ch('a'), ch('b'), ch('c')], 'a', 'c');
-        expect(next.map(n => n.id)).toEqual(['c', 'b', 'a']);
+describe('findParentId', () => {
+    it('ルート直下なら null', () => {
+        expect(findParentId([ch('a')], 'a')).toBeNull();
     });
 
-    it('フォルダ内でも入れ替えられる', () => {
-        const next = reorderInTree([folder('F', [ch('a'), ch('b')])], 'a', 'b');
-        expect((next[0] as FavoriteFolder).children.map(n => n.id)).toEqual(['b', 'a']);
+    it('フォルダの中なら親フォルダの ID', () => {
+        expect(findParentId([folder('F', [ch('a')])], 'a')).toBe('F');
+    });
+
+    it('入れ子でも辿れる', () => {
+        expect(findParentId([folder('F', [folder('G', [ch('a')])])], 'a')).toBe('G');
+    });
+
+    // null（ルート）と undefined（不在）を混同すると、存在しないノードへの
+    // 移動がルートへの移動として実行されてしまう
+    it('存在しなければ undefined（null と区別する）', () => {
+        expect(findParentId([ch('a')], 'zzz')).toBeUndefined();
+    });
+});
+
+describe('canMoveInto', () => {
+    it('ルートへは移動できる', () => {
+        expect(canMoveInto([folder('F', [ch('a')])], 'a', null)).toBe(true);
+    });
+
+    it('自分自身の中へは移動できない', () => {
+        expect(canMoveInto([folder('A')], 'A', 'A')).toBe(false);
+    });
+
+    it('自分の子孫の中へは移動できない', () => {
+        expect(canMoveInto([folder('A', [folder('B')])], 'A', 'B')).toBe(false);
+    });
+
+    it('存在しないフォルダへは移動できない', () => {
+        expect(canMoveInto([ch('a')], 'a', 'NOPE')).toBe(false);
+    });
+
+    it('存在しないノードは移動できない', () => {
+        expect(canMoveInto([ch('a')], 'zzz', null)).toBe(false);
+    });
+
+    // MAX_DEPTH = 2（ルート + 1階層）
+    it('深さ制限を超えるフォルダ移動を拒否する', () => {
+        const tree = [folder('A'), folder('B', [folder('B1')])];
+        // B（サブフォルダ持ち）を A の中に入れると 3階層になる
+        expect(canMoveInto(tree, 'B', 'A')).toBe(false);
+    });
+
+    it('サブフォルダを持たないフォルダなら1階層下へ移動できる', () => {
+        const tree = [folder('A'), folder('B')];
+        expect(canMoveInto(tree, 'B', 'A')).toBe(true);
+    });
+
+    it('チャンネルは深さ制限の対象外', () => {
+        const tree = [folder('A', [folder('A1')]), ch('c')];
+        expect(canMoveInto(tree, 'c', 'A1')).toBe(true);
+    });
+});
+
+describe('moveNodeRelative', () => {
+    // 報告された不具合: フォルダの中の要素を上位の階層へ戻せなかった
+    it('フォルダ内の要素をルート直下の項目の前に落とすとルートへ上がる', () => {
+        const tree = [folder('F', [ch('a')]), ch('b')];
+        const next = moveNodeRelative(tree, 'a', 'b', 'before');
+        expect(next.map(n => n.id)).toEqual(['F', 'a', 'b']);
+        expect((next[0] as FavoriteFolder).children).toEqual([]);
+    });
+
+    it('後ろにも挿入できる', () => {
+        const tree = [folder('F', [ch('a')]), ch('b')];
+        const next = moveNodeRelative(tree, 'a', 'b', 'after');
+        expect(next.map(n => n.id)).toEqual(['F', 'b', 'a']);
+    });
+
+    // 入れ替え（swap）だと A を C に落として C B A になり直感に反する
+    it('同じ親の中では入れ替えではなく挿入になる', () => {
+        const next = moveNodeRelative([ch('a'), ch('b'), ch('c')], 'a', 'c', 'after');
+        expect(next.map(n => n.id)).toEqual(['b', 'c', 'a']);
+    });
+
+    it('前方へ動かすときも位置が正しい', () => {
+        const next = moveNodeRelative([ch('a'), ch('b'), ch('c')], 'c', 'a', 'before');
+        expect(next.map(n => n.id)).toEqual(['c', 'a', 'b']);
+    });
+
+    it('ルートの要素をフォルダ内の項目の隣へ落とすと、そのフォルダに入る', () => {
+        const tree = [folder('F', [ch('a')]), ch('b')];
+        const next = moveNodeRelative(tree, 'b', 'a', 'after');
+        expect(next.map(n => n.id)).toEqual(['F']);
+        expect((next[0] as FavoriteFolder).children.map(n => n.id)).toEqual(['a', 'b']);
+    });
+
+    it('別フォルダの項目の隣へ移せる', () => {
+        const tree = [folder('F', [ch('a')]), folder('G', [ch('b')])];
+        const next = moveNodeRelative(tree, 'a', 'b', 'before');
+        expect((next[0] as FavoriteFolder).children).toEqual([]);
+        expect((next[1] as FavoriteFolder).children.map(n => n.id)).toEqual(['a', 'b']);
+    });
+
+    it('自分自身を対象にしても何も起きない', () => {
+        const tree = [ch('a'), ch('b')];
+        expect(moveNodeRelative(tree, 'a', 'a', 'before')).toBe(tree);
+    });
+
+    it('存在しない対象なら何も起きない', () => {
+        const tree = [ch('a')];
+        expect(moveNodeRelative(tree, 'a', 'zzz', 'before')).toBe(tree);
+    });
+
+    it('自分の子孫の隣へは移動できない（サブツリーを失わない）', () => {
+        const tree = [folder('A', [ch('c1')])];
+        const next = moveNodeRelative(tree, 'A', 'c1', 'before');
+        expect(next).toBe(tree);
+        expect(allIds(next).sort()).toEqual(['A', 'c1']);
+    });
+
+    it('深さ制限を超える移動は拒否する', () => {
+        const tree = [folder('A', [ch('x')]), folder('B', [folder('B1')])];
+        // B を A の中の x の隣に置くと 3階層になる
+        expect(moveNodeRelative(tree, 'B', 'x', 'after')).toBe(tree);
+    });
+
+    it('どの操作でもノードを失わない', () => {
+        const tree = [folder('F', [ch('a'), ch('b')]), folder('G', [ch('c')]), ch('d')];
+        const before = allIds(tree).sort();
+        for (const from of ['a', 'b', 'c', 'd', 'F', 'G']) {
+            for (const to of ['a', 'b', 'c', 'd', 'F', 'G']) {
+                for (const pos of ['before', 'after'] as const) {
+                    expect(allIds(moveNodeRelative(tree, from, to, pos)).sort()).toEqual(before);
+                }
+            }
+        }
     });
 });
 

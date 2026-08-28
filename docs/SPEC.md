@@ -449,6 +449,37 @@ YouTubeチャンネル枠は**解決後の video ID ではなくハンドルを�
   トップレベル＝ファーストパーティになるので確実に動く（未実装）
 - マウス操作前提。タッチ操作には対応しない
 
+## 13. 外部入力の検証
+
+**localStorage と共有コードはアプリの外で書き換えられる。** どちらも
+`utils/validate.ts` を必ず通す。
+
+以前はどちらも型キャストするだけで素通ししており、壊れたデータを1回読むと
+**起動不能**になった:
+
+1. 検証せず localStorage に保存する
+2. その後の描画で `toDisplayName` が `undefined.replace` で落ちる
+3. 例外は描画中なので、読み込み処理の try/catch では捕まらない
+4. 保存済みなのでリロードしても落ち続ける
+
+方針:
+
+- **描画で使う値が揃っていることを、保存する前に保証する**
+- 壊れた要素は**捨てて先に進む**。全体を拒否すると1件の破損で全部を失う
+- `title` のように描画が必ず触る値は、欠けていたら補う
+- **配列が入っているセクションだけを「ある」とみなす**（`has`）。
+  `favorites: null` を「空で置き換える」と解釈すると既存データが消える
+- 入れ子は深さ8で打ち切る。文字列にも長さ上限を置く
+- ID は捏造せず、保存前に `assignMissingIds` で振る（重複も振り直す）
+
+読み込みは**上書き**なので、`ShareModal` は検証 → 内容の提示 → 確認 → 適用の
+順に分けてある。以前は無警告でお気に入りと履歴を丸ごと置き換えていた。
+
+最後の砦として `ErrorBoundary`（`components/ErrorBoundary.tsx`）を `App` の外側に置く。
+`App` 自身が保存データの読み込みで落ちるため、内側では捕まえられない。
+**保存データを消して復旧するボタンを必ず出す**（白画面のままだと手動で
+localStorage を消すしかなくなる）。
+
 ## 11. 表示名
 
 パネル・枠ヘッダー・コメントセレクターの表示は `toDisplayName()`（`types.ts`）を通す。
@@ -484,6 +515,7 @@ npm run test:watch
 | `utils/resolveCache.test.ts` | node | TTL の境界、期限切れの掃除、上限超過時の破棄順 |
 | `utils/layout.test.ts` | node | 区画数・範囲・重なりの不変条件、保存値の復元 |
 | `utils/favoriteTree.test.ts` | node | 移動の可否判定、挿入位置、**ノードを失わないこと** |
+| `utils/validate.test.ts` | node | 外部入力の検証。壊れたデータで描画が落ちないこと |
 | `hooks/useHoverPanel.test.tsx` | jsdom | ホバー表示・遅延非表示・アイドル・**ピン留め** |
 | `components/ChatSidePanel.test.tsx` | jsdom | フックへの配線、チャンネル選択の解決 |
 | `components/AddStreamModal.test.tsx` | jsdom | ペーストボタンの配線と失敗時の表示 |

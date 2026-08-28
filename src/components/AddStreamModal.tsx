@@ -4,6 +4,7 @@ import type { Stream } from '../types';
 import { t } from '../i18n';
 import type { Locale } from '../i18n';
 import { parseTwitchInput, parseYouTubeInput } from '../utils/parseInput';
+import { parseShareCode } from '../utils/validate';
 
 interface AddStreamModalProps {
     onClose: () => void;
@@ -31,29 +32,11 @@ function normalizeHandle(h: string | undefined): string {
     return h.startsWith('@') ? h.slice(1) : h;
 }
 
-/**
- * 共有コードをデコードする。
- * v1 = 配信の配列そのもの / v2 = { v: 2, streams?, favorites?, history? }
- * まとめて追加欄では streams セクションのみを取り込む。
- */
+/** 共有コードから配信セクションだけを取り出す（検証は utils/validate.ts） */
 function tryDecodeShareCode(code: string): Omit<Stream, 'id'>[] | null {
-    try {
-        const decoded = JSON.parse(decodeURIComponent(atob(code.trim())));
-
-        let list: unknown[] | null = null;
-        if (Array.isArray(decoded)) {
-            list = decoded;                                  // v1
-        } else if (decoded && decoded.v === 2) {
-            list = Array.isArray(decoded.streams) ? decoded.streams : [];  // v2（配信なしなら空）
-        }
-        if (!list) return null;
-
-        const isStream = (s: unknown) =>
-            typeof s === 'object' && s !== null && 'type' in s && 'sourceId' in s;
-        if (!list.every(isStream)) return null;
-
-        return list as Omit<Stream, 'id'>[];
-    } catch { return null; }
+    const parsed = parseShareCode(code);
+    if (!parsed || parsed.streams.length === 0) return null;
+    return parsed.streams;
 }
 
 function buildStream(type: 'twitch' | 'youtube', parsed: ReturnType<typeof parseTwitchInput>): Stream {

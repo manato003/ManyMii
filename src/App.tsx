@@ -5,6 +5,7 @@ import './index.css';
 import './side-panel.css';
 import StreamGrid from './components/StreamGrid';
 import { useStreamLayout } from './hooks/useStreamLayout';
+import { sanitizeStreams } from './utils/validate';
 import StreamSidePanel from './components/StreamSidePanel';
 import ChatSidePanel from './components/ChatSidePanel';
 import AddStreamModal from './components/AddStreamModal';
@@ -39,8 +40,10 @@ function loadStreams(): Stream[] {
     if (!raw) return [];
     // isResolving は実行時フラグ。旧バージョンが true のまま保存している場合の救済
     // domSeq は永続化していないので、復元時に配列順で振り直す
-    const list = (JSON.parse(raw) as Stream[]).map((s, i) => ({
+    // 保存済みでも信用しない。壊れていると描画で落ち、リロードしても直らない
+    const list = sanitizeStreams(JSON.parse(raw)).map((s, i) => ({
       ...s,
+      id: crypto.randomUUID(),
       isResolving: false,
       domSeq: i + 1,
     }));

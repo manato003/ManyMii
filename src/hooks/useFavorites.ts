@@ -11,6 +11,7 @@ import {
     collectChannelIds,
     collectFolders,
 } from '../utils/favoriteTree';
+import { sanitizeFavorites, assignMissingIds } from '../utils/validate';
 import type { FolderInfo } from '../utils/favoriteTree';
 
 export type { FolderInfo } from '../utils/favoriteTree';
@@ -20,10 +21,16 @@ const STORAGE_KEY = 'favorites';
 
 // ── localStorage 永続化 ──
 
+/**
+ * 保存済みのツリーを読む。
+ * **必ず検証を通すこと。** 壊れたデータが入っていると描画で例外になり、
+ * 保存済みなのでリロードしても直らない（＝起動不能になる）。
+ */
 function load(): FavoriteNode[] {
     try {
         const raw = localStorage.getItem(STORAGE_KEY);
-        return raw ? JSON.parse(raw) : [];
+        if (!raw) return [];
+        return assignMissingIds(sanitizeFavorites(JSON.parse(raw)), () => crypto.randomUUID());
     } catch {
         return [];
     }
@@ -129,7 +136,9 @@ export function useFavorites() {
     }, [tree]);
 
     /** インポート: ツリーを丸ごと置換（ID再生成で衝突防止） */
-    const importTree = useCallback((nodes: FavoriteNode[]) => {
+    const importTree = useCallback((raw: FavoriteNode[]) => {
+        // 外から来たツリーは信用しない。ID は衝突を避けるため必ず振り直す
+        const nodes = sanitizeFavorites(raw);
         const regen = (ns: FavoriteNode[]): FavoriteNode[] => ns.map(n =>
             n.kind === 'folder'
                 ? { ...n, id: crypto.randomUUID(), children: regen(n.children) }

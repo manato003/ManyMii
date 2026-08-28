@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import type { Stream } from '../types';
+import { sanitizeHistory } from '../utils/validate';
 
 const HISTORY_KEY = 'streamHistory';
 const MAX_HISTORY = 50;
@@ -13,10 +14,14 @@ export interface HistoryEntry {
     displayName?: string;
 }
 
+/** 保存済みの履歴を読む。壊れた項目は捨てる（描画で落ちるのを防ぐ） */
 function load(): HistoryEntry[] {
     try {
         const raw = localStorage.getItem(HISTORY_KEY);
-        return raw ? JSON.parse(raw) : [];
+        if (!raw) return [];
+        return sanitizeHistory(JSON.parse(raw))
+            .slice(0, MAX_HISTORY)
+            .map(e => ({ ...e, historyId: crypto.randomUUID() }));
     } catch {
         return [];
     }
@@ -88,7 +93,10 @@ export function useStreamHistory() {
     }, []);
 
     const importHistory = useCallback((entries: HistoryEntry[]) => {
-        const next = entries.map(e => ({ ...e, historyId: crypto.randomUUID() }));
+        // 外から来た履歴は信用しない
+        const next = sanitizeHistory(entries)
+            .slice(0, MAX_HISTORY)
+            .map(e => ({ ...e, historyId: crypto.randomUUID() }));
         save(next);
         setHistory(next);
     }, []);

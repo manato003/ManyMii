@@ -1,9 +1,10 @@
 import React, { useState, useMemo } from 'react';
-import { X, Copy, Check, Download } from 'lucide-react';
+import { X, Copy, Check, Download, AlertTriangle } from 'lucide-react';
 import { t } from '../i18n';
 import type { Locale } from '../i18n';
 import type { Stream, FavoriteNode } from '../types';
 import type { HistoryEntry } from '../hooks/useStreamHistory';
+import { parseShareCode, type ShareContents } from '../utils/validate';
 
 // ── v2 share format ──────────────────────────────────────────────────────────
 
@@ -55,6 +56,9 @@ const ShareModal: React.FC<ShareModalProps> = ({
     // import
     const [importCode, setImportCode] = useState('');
     const [copied, setCopied] = useState(false);
+    const [importError, setImportError] = useState<string | null>(null);
+    /** 検証を通ったコードの中身。確認してから適用する */
+    const [pending, setPending] = useState<ShareContents | null>(null);
 
     // compute counts of flat favorites (channels only, for display)
     const favCount = useMemo(() => {
@@ -98,43 +102,42 @@ const ShareModal: React.FC<ShareModalProps> = ({
         setTimeout(() => setCopied(false), 2000);
     };
 
-    const handleImport = () => {
-        if (!importCode.trim()) return;
-        try {
-            const decoded = JSON.parse(decodeURIComponent(atob(importCode.trim())));
-
-            if (Array.isArray(decoded)) {
-                // v1 backward compat: plain stream array
-                const newStreams: Stream[] = decoded.map((s: StreamExport) => ({
-                    ...s,
-                    id: crypto.randomUUID(),
-                }));
-                onApplyStreams(newStreams);
-            } else if (decoded && decoded.v === 2) {
-                // v2: apply each present section
-                const d = decoded as ShareDataV2;
-                if (d.streams) {
-                    const newStreams: Stream[] = d.streams.map((s: StreamExport) => ({
-                        ...s,
-                        id: crypto.randomUUID(),
-                    }));
-                    onApplyStreams(newStreams);
-                }
-                if (d.favorites) {
-                    onApplyFavorites(d.favorites);
-                }
-                if (d.history) {
-                    onApplyHistory(d.history);
-                }
-            } else {
-                throw new Error('Unknown format');
-            }
-            onClose();
-        } catch (e) {
-            console.error('Import error:', e);
-            alert(label('無効なコードです', 'Invalid layout code!'));
+    /**
+     * 読み込みは**上書き**なので、いきなり適用しない。
+     * 検証したうえで「何が何件、どこに入るか」を見せ、確認を取ってから適用する。
+     * 以前は無警告でお気に入りと履歴を丸ごと置き換えていた。
+     */
+    const handleCheckCode = () => {
+        const code = importCode.trim();
+        if (!code) return;
+        const parsed = parseShareCode(code);
+        if (!parsed) {
+            setPending(null);
+            setImportError(label('コードを読み取れませんでした', 'Could not read this code'));
+            return;
         }
+        setImportError(null);
+        setPending(parsed);
     };
+
+    const handleApply = () => {
+        if (!pending) return;
+        if (pending.has.streams) {
+            onApplyStreams(pending.streams.map(s => ({ ...s, id: crypto.randomUUID() })));
+        }
+        if (pending.has.favorites) onApplyFavorites(pending.favorites);
+        if (pending.has.history) {
+            onApplyHistory(pending.history.map(e => ({ ...e, historyId: crypto.randomUUID() })));
+        }
+        onClose();
+    };
+
+    /** 確認画面に出す「置き換わるもの」の一覧 */
+    const pendingRows = pending ? ([
+        pending.has.streams ? label(`配信 ${pending.streams.length}件`, `${pending.streams.length} streams`) : null,
+        pending.has.favorites ? label(`お気に入り ${pending.favorites.length}件`, `${pending.favorites.length} favorites`) : null,
+        pending.has.history ? label(`履歴 ${pending.history.length}件`, `${pending.history.length} history entries`) : null,
+    ].filter(Boolean) as string[]) : [];
 
     return (
         <div className="modal-overlay" onClick={onClose}>
@@ -204,16 +207,44 @@ const ShareModal: React.FC<ShareModalProps> = ({
                             style={{ minHeight: '80px', resize: 'vertical' }}
                             placeholder={t(locale, 'importPlaceholder')}
                             value={importCode}
-                            onChange={e => setImportCode(e.target.value)}
+                            onChange={e => { setImportCode(e.target.value); setPending(null); setImportError(null); }}
                         />
-                        <button
-                            className="primary-button"
-                            style={{ width: '100%', justifyContent: 'center' }}
-                            onClick={handleImport}
-                        >
-                            <Download size={14} />
-                            {t(locale, 'importCode')}
-                        </button>
+                        {importError && (
+                            <p style={{ fontSize: '0.72rem', color: 'var(--danger)' }}>{importError}</p>
+                        )}
+
+                        {pending ? (
+                            <div className="import-confirm">
+                                <p className="import-confirm-warning">
+                                    <AlertTriangle size={13} />
+                                    <span>{label('以下を現在の内容と置き換えます。元に戻せません。', 'This replaces your current data. It cannot be undone.')}</span>
+                                </p>
+                                <ul className="import-confirm-list">
+                                    {pendingRows.map(row => <li key={row}>{row}</li>)}
+                                </ul>
+                                <div className="import-confirm-actions">
+                                    <button className="paste-btn" onClick={() => setPending(null)}>
+                                        {label('やめる', 'Cancel')}
+                                    </button>
+                                    <button
+                                        className="add-btn add-btn--block"
+                                        onClick={handleApply}
+                                    >
+                                        <Download size={13} />
+                                        <span>{label('置き換える', 'Replace')}</span>
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <button
+                                className="primary-button"
+                                style={{ width: '100%', justifyContent: 'center' }}
+                                onClick={handleCheckCode}
+                            >
+                                <Download size={14} />
+                                {t(locale, 'importCode')}
+                            </button>
+                        )}
                     </div>
                 </div>
             </div>

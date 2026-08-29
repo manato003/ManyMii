@@ -71,6 +71,21 @@ Twitch にオフライン判定・自動再確認・コメント欄の出し分�
 
 ## 作業ルール
 
+### push / deploy はユーザーの指示があるまで行わない（最重要）
+
+| ユーザーの指示 | やること |
+|---|---|
+| （指示なし） | **commit まで。** push しない |
+| 「プッシュして」 | commit + push。**deploy はしない** |
+| 「デプロイまで」 | commit + push + deploy（本番反映の確認まで） |
+
+commit は指示がなくても自動で行ってよい。**push と deploy だけが承認制。**
+
+> **注意: master へ push すると Vercel が自動でデプロイする。**
+> 「push だけして deploy はしない」は現在の構成では成立しない。
+> 分ける必要があるときは master 以外のブランチへ push すること
+> （Vercel は Preview を作るだけで、本番URLは変わらない）。
+
 - コードを編集したら**論理的なまとまりごとにgit commit**する（細かいコミットが安全）
 - コミット: `cd "C:\Dev\projects\multistream-app"; git add <files>; git commit -m "メッセージ"`
 - `git add .` は `nul` ファイルを巻き込む危険があるため、ファイルを個別に指定する

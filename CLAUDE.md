@@ -76,15 +76,20 @@ Twitch にオフライン判定・自動再確認・コメント欄の出し分�
 | ユーザーの指示 | やること |
 |---|---|
 | （指示なし） | **commit まで。** push しない |
-| 「プッシュして」 | commit + push。**deploy はしない** |
-| 「デプロイまで」 | commit + push + deploy（本番反映の確認まで） |
+| 「プッシュして」 | commit + push |
+| 「デプロイまで」 | commit + push + 本番反映の確認 |
 
-commit は指示がなくても自動で行ってよい。**push と deploy だけが承認制。**
+commit は指示がなくても自動で行ってよい。**push だけが承認を要する操作。**
 
-> **注意: master へ push すると Vercel が自動でデプロイする。**
-> 「push だけして deploy はしない」は現在の構成では成立しない。
-> 分ける必要があるときは master 以外のブランチへ push すること
-> （Vercel は Preview を作るだけで、本番URLは変わらない）。
+> **master へ push すると Vercel が自動でデプロイする。**
+> つまり「プッシュして」は実質デプロイと同じ。**これは承知のうえで現状維持と決めた
+> （2026-08-29）。** ブランチを分けて Preview に逃がす案は採らない。
+>
+> したがって**「プッシュして」と言われた時点で本番が更新される。**
+> push 前に `npm run lint` / `npm test` / `npm run build` を必ず通すこと。
+>
+> 「デプロイまで」との違いは、**本番URLのアセットハッシュを照合して
+> 反映を確認するところまでやるかどうか**だけ。
 
 - コードを編集したら**論理的なまとまりごとにgit commit**する（細かいコミットが安全）
 - コミット: `cd "C:\Dev\projects\multistream-app"; git add <files>; git commit -m "メッセージ"`

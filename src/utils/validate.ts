@@ -38,9 +38,20 @@ function inputType(v: unknown): 'channel' | 'video' | 'url' | null {
     return v === 'channel' || v === 'video' || v === 'url' ? v : null;
 }
 
+/** true / false のときだけ拾う。未設定と false は意味が違うので undefined を返す */
+function bool(v: unknown): boolean | undefined {
+    return typeof v === 'boolean' ? v : undefined;
+}
+
 // ── 配信 ──────────────────────────────────────────────────────────────────────
 
-/** 描画に必要な値が揃っている配信だけを取り出す。id は呼び出し側で振る */
+/**
+ * 描画に必要な値が揃っている配信だけを取り出す。id は呼び出し側で振る。
+ *
+ * **許可リストなので、追加した項目はここにも足すこと。**
+ * `hidden` を落として「非表示にした枠が起動時に復活する」不具合を出したことがある。
+ * `isLive` を落とすと、オフラインの枠が起動時にオフライン表示にならない。
+ */
 export function sanitizeStreams(v: unknown): Omit<Stream, 'id'>[] {
     if (!Array.isArray(v)) return [];
     const out: Omit<Stream, 'id'>[] = [];
@@ -58,7 +69,11 @@ export function sanitizeStreams(v: unknown): Omit<Stream, 'id'>[] {
             // title は toDisplayName が必ず触るので、欠けていたら補う
             title: str(raw.title) ?? `${type === 'youtube' ? 'YouTube' : 'Twitch'}: ${sourceId}`,
             ...(str(raw.channelHandle, 200) ? { channelHandle: raw.channelHandle as string } : {}),
+            ...(str(raw.channelId, 100) ? { channelId: raw.channelId as string } : {}),
             ...(str(raw.displayName) ? { displayName: raw.displayName as string } : {}),
+            ...(bool(raw.hidden) !== undefined ? { hidden: bool(raw.hidden) } : {}),
+            ...(bool(raw.isLive) !== undefined ? { isLive: bool(raw.isLive) } : {}),
+            ...(bool(raw.resolveError) !== undefined ? { resolveError: bool(raw.resolveError) } : {}),
         });
     }
     return out;

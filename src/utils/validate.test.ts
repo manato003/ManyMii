@@ -49,6 +49,32 @@ describe('sanitizeStreams', () => {
         expect(s).toEqual({ type: 'twitch', sourceId: 'foo', inputType: 'channel', title: 'Twitch: foo' });
     });
 
+    // 許可リスト方式なので、項目を足し忘れると保存済みの状態が黙って消える。
+    // 実際に hidden を落として「非表示の枠が起動時に復活する」不具合を出した
+    it('保存されている状態の項目を落とさない', () => {
+        const [s] = sanitizeStreams([{
+            type: 'youtube', sourceId: 'abc', inputType: 'video', title: 'YouTube: abc',
+            hidden: true, isLive: false, channelHandle: 'foo', channelId: 'UCxxx', resolveError: true,
+        }]);
+        expect(s.hidden).toBe(true);
+        expect(s.isLive).toBe(false);
+        expect(s.channelId).toBe('UCxxx');
+        expect(s.resolveError).toBe(true);
+        expect(s.channelHandle).toBe('foo');
+    });
+
+    it('真偽値でない hidden / isLive は落とす（未設定と区別する）', () => {
+        const [s] = sanitizeStreams([{ type: 'youtube', sourceId: 'a', hidden: 'yes', isLive: 1 }]);
+        expect('hidden' in s).toBe(false);
+        expect('isLive' in s).toBe(false);
+    });
+
+    it('false も保持する（未設定に潰さない）', () => {
+        const [s] = sanitizeStreams([{ type: 'youtube', sourceId: 'a', hidden: false, isLive: false }]);
+        expect(s.hidden).toBe(false);
+        expect(s.isLive).toBe(false);
+    });
+
     it('極端に長い文字列は捨てる（DOM を膨らませない）', () => {
         const huge = 'x'.repeat(100000);
         expect(sanitizeStreams([{ type: 'youtube', sourceId: huge }])).toEqual([]);

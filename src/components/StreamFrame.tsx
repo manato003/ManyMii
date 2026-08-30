@@ -5,6 +5,7 @@ import { toDisplayName } from '../types';
 import TwitchPlayer from './TwitchPlayer';
 import YouTubePlayer from './YouTubePlayer';
 import { t } from '../i18n';
+import { logEvent } from '../utils/eventLog';
 import type { Locale } from '../i18n';
 
 interface StreamFrameProps {
@@ -50,6 +51,7 @@ const StreamFrame: React.FC<StreamFrameProps> = React.memo(({
 
     const handleReload = async (e: React.MouseEvent) => {
         e.stopPropagation(); e.preventDefault();
+        logEvent('reload-click', stream.id);
         // YouTubeチャンネル由来の枠は video ID を再取得してから切り替える。
         // ライブ中は inputType が 'video' になっているため channelHandle の有無で判定する。
         if (stream.type === 'youtube' && stream.channelHandle) {
@@ -150,6 +152,7 @@ const StreamFrame: React.FC<StreamFrameProps> = React.memo(({
                         key={reloadKey}
                         videoId={stream.sourceId}
                         isChannel={stream.inputType === 'channel'}
+                        streamId={stream.id}
                     />
                 )}
             </div>

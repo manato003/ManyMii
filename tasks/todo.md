@@ -252,3 +252,23 @@ Ctrl+クリック選択＋アクションバーでの一括移動はそのまま
   <sub>調査メモ: 公開 GraphQL `https://gql.twitch.tv/gql` は CORS `*` で、1リクエストで
   `displayName` とライブ状態が数KBで取れる。将来必要になったときの選択肢として記録。
   ただし twitch.tv の web クライアントの公開 Client-ID を借りる形になる</sub>
+
+### 観測ログの後片付け（原因が判明したら）
+
+「ライブ配信が続いているのに埋め込みが終了表示になる」現象の調査用に、
+観測専用のコードを入れてある（`docs/SPEC.md` 13章）。**恒久的な機能ではない。**
+
+原因が特定できたら以下を削除する:
+
+- `src/utils/eventLog.ts` と `eventLog.test.ts`
+- `YouTubePlayer` の `useEffect`（postMessage の購読）と `streamId` prop、
+  URL の `enablejsapi=1&origin=`
+- `main.tsx` の `window.manymiiLog` / `manymiiLogClear`
+- `StreamGrid` / `App` / `StreamFrame` の `logEvent()` 呼び出し
+- `docs/SPEC.md` 13章
+
+判断材料:
+
+- 終了表示に落ちたとき `yt-state ended` が出る → **自動検知・自動復旧が作れる**
+- 何も出ない → 検知不能。制約として確定させ、リロード導線のままにする
+- 直前に `expand` / `restore` がある → `display:none` が原因。拡大の実装を見直す

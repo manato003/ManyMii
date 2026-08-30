@@ -4,6 +4,7 @@ import type { Stream } from '../types';
 import type { Locale } from '../i18n';
 import { t } from '../i18n';
 import { buildLayout, toTemplate, toGridArea, resizeTracks, buildHandleSegments, type TemplateId, type ResolvedLayout } from '../utils/layout';
+import { logEvent } from '../utils/eventLog';
 
 interface StreamGridProps {
     streams: Stream[];
@@ -40,12 +41,19 @@ const StreamGrid: React.FC<StreamGridProps> = ({ streams, setStreams, locale, on
     }, []);
 
     const removeStream = useCallback((id: string) => {
+        logEvent('close', id);
         setStreams(prev => prev.filter(s => s.id !== id));
         setExpandedId(prev => prev === id ? null : prev);
     }, [setStreams]);
 
     const toggleExpand = useCallback((id: string) => {
-        setExpandedId(prev => prev === id ? null : id);
+        // 拡大中は他の枠を display:none にしている。復帰後に終了表示へ落ちる現象と
+        // 関連があるかを見るため、拡大と復帰を記録する
+        setExpandedId(prev => {
+            const next = prev === id ? null : id;
+            logEvent(next ? 'expand' : 'restore', id);
+            return next;
+        });
     }, []);
 
     // ── Drag: mouse-based, with elementFromPoint detection ──────────────────

@@ -6,6 +6,7 @@ import './side-panel.css';
 import StreamGrid from './components/StreamGrid';
 import { useStreamLayout } from './hooks/useStreamLayout';
 import { sanitizeStreams } from './utils/validate';
+import { logEvent } from './utils/eventLog';
 import StreamSidePanel from './components/StreamSidePanel';
 import ChatSidePanel from './components/ChatSidePanel';
 import AddStreamModal from './components/AddStreamModal';
@@ -374,7 +375,11 @@ function App() {
   }, []);
 
   const handleToggleHidden = useCallback((id: string) => {
-    setStreams(prev => prev.map(s => s.id === id ? { ...s, hidden: !s.hidden } : s));
+    setStreams(prev => prev.map(s => {
+      if (s.id !== id) return s;
+      logEvent(s.hidden ? 'show' : 'hide', id);
+      return { ...s, hidden: !s.hidden };
+    }));
   }, []);
 
   const handleRemoveStream = useCallback((id: string) => {

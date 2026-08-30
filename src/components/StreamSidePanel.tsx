@@ -69,8 +69,8 @@ interface StreamSidePanelProps {
     getFavFolders?: () => FolderInfo[];
     onAddStreamToFavorites?: (stream: Stream) => void;
     /** ライブ状態を再確認できる枠の数（0 のときボタンは無効） */
-    offlineChannelCount: number;
-    onRefreshOffline: () => void;
+    refreshableCount: number;
+    onRefresh: () => void;
     /** 選択中のレイアウト */
     layoutTemplate: TemplateId;
     onLayoutChange: (id: TemplateId) => void;
@@ -86,7 +86,7 @@ const StreamSidePanel: React.FC<StreamSidePanelProps> = ({
     onAddToFavorites, onBulkAddFromFolder,
     isPinned = false, onPinChange, getFavFolders,
     onAddStreamToFavorites,
-    offlineChannelCount, onRefreshOffline,
+    refreshableCount, onRefresh,
     layoutTemplate, onLayoutChange, layoutStreamCount,
 }) => {
     const { visible, show, scheduleHide } = useHoverPanel({ hideDelay, idleTimeout: 5000, isPinned });
@@ -320,12 +320,12 @@ const StreamSidePanel: React.FC<StreamSidePanelProps> = ({
                         <div className="side-panel-header-actions">
                             <button
                                 className="side-panel-pin"
-                                onClick={onRefreshOffline}
-                                disabled={offlineChannelCount === 0}
-                                title={offlineChannelCount > 0
-                                    ? label(`オフライン枠を再確認 (${offlineChannelCount})`, `Re-check offline streams (${offlineChannelCount})`)
+                                onClick={onRefresh}
+                                disabled={refreshableCount === 0}
+                                title={refreshableCount > 0
+                                    ? label(`配信を再確認 (${refreshableCount})`, `Re-check streams (${refreshableCount})`)
                                     : label('再確認できる枠がありません', 'Nothing to re-check')}
-                                aria-label={label('オフライン枠を再確認', 'Re-check offline streams')}
+                                aria-label={label('配信を再確認', 'Re-check streams')}
                             >
                                 <RefreshCw size={13} />
                             </button>

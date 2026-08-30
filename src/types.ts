@@ -41,6 +41,18 @@ export interface FavoriteChannel {
 }
 
 /**
+ * 再解決できる枠か。YouTubeチャンネル由来の枠だけが対象。
+ *
+ * **ライブ中でも対象に含める。** 配信者が配信を仕切り直すと video ID が変わり、
+ * 古い ID の埋め込みは「配信終了」のサムネイルになる。
+ * 「ライブ中なら video ID は変わらない」という前提で除外していたため、
+ * 一度ライブ判定された枠がセッション中ずっと直らない不具合があった。
+ */
+export function isRefreshable(s: Stream): boolean {
+    return Boolean(s.channelHandle) && !s.isResolving;
+}
+
+/**
  * パネルに出す表示名。
  * 表示名が取得できていればそれを、なければ title から "YouTube: " 等の接頭辞と
  * 先頭の @ を取り除いた識別子を返す。

@@ -13,6 +13,7 @@ import ShareModal from './components/ShareModal';
 import HelpModal from './components/HelpModal';
 import SettingsModal from './components/SettingsModal';
 import type { Stream } from './types';
+import { isRefreshable } from './types';
 import { t } from './i18n';
 import type { Locale } from './i18n';
 import { useStreamHistory } from './hooks/useStreamHistory';
@@ -181,13 +182,17 @@ function App() {
   useEffect(() => { streamsRef.current = streams; }, [streams]);
 
   /**
-   * オフライン / 取得失敗の YouTubeチャンネル枠をまとめて再解決する。
-   * プロキシに負荷をかけないよう逐次実行する（ライブ中の枠は video ID が
-   * 変わらないので対象外）。
+   * YouTubeチャンネル枠をまとめて再解決する。プロキシに負荷をかけないよう逐次実行する。
+   *
+   * `includeLive` で対象が変わる:
+   * - **手動（ボタン）は true。** 配信の仕切り直しで video ID が変わり、
+   *   古い ID の埋め込みが「配信終了」のサムネイルになるため、ライブ中も対象にする
+   * - **定期実行は false。** 1レスポンスが 1.2〜2.7MB あるので、
+   *   目的（オフライン枠がライブになったのを拾う）に絞って通信量を抑える
    */
-  const refreshOfflineStreams = useCallback(async (showSpinner: boolean) => {
+  const refreshStreams = useCallback(async (showSpinner: boolean, includeLive: boolean) => {
     const targets = streamsRef.current.filter(
-      s => s.channelHandle && s.isLive !== true && !s.isResolving,
+      s => isRefreshable(s) && (includeLive || s.isLive !== true),
     );
     if (targets.length === 0) return;
 
@@ -201,17 +206,17 @@ function App() {
     }
   }, [resolveStreamInBackground]);
 
-  const handleRefreshOffline = useCallback(() => { void refreshOfflineStreams(true); }, [refreshOfflineStreams]);
+  const handleRefresh = useCallback(() => { void refreshStreams(true, true); }, [refreshStreams]);
 
   // オフライン枠の定期再確認。タブが見えていないときは何もしない
   useEffect(() => {
     if (!settings.autoRefreshOffline) return;
     const id = setInterval(() => {
       if (document.hidden) return;
-      void refreshOfflineStreams(false);
+      void refreshStreams(false, false);
     }, AUTO_REFRESH_MS);
     return () => clearInterval(id);
-  }, [settings.autoRefreshOffline, refreshOfflineStreams]);
+  }, [settings.autoRefreshOffline, refreshStreams]);
 
   // 起動時: 復元した YouTubeチャンネル枠の video ID を再取得する。
   // スピナーは出さず、解決できたら差し替える（前回の枠がすぐ再生される）
@@ -438,9 +443,9 @@ function App() {
   // レイアウトは「見えている枠の数」に紐づける。非表示の枠はグリッドに出ないため
   const { templateId: layoutTemplate, setTemplate: setLayoutTemplate, setTracks: setLayoutTracks, resolveTracks: resolveLayoutTracks } = useStreamLayout(visibleStreams.length);
 
-  // 再確認の対象になる枠（YouTubeチャンネル枠でライブ中でないもの）
-  const offlineChannelCount = useMemo(
-    () => streams.filter(s => s.channelHandle && s.isLive !== true).length,
+  // 再確認の対象になる枠（YouTubeチャンネル由来の枠すべて）
+  const refreshableCount = useMemo(
+    () => streams.filter(isRefreshable).length,
     [streams],
   );
 
@@ -518,8 +523,8 @@ function App() {
           onPinChange={setIsStreamPinned}
           getFavFolders={getFavFolders}
           onAddStreamToFavorites={handleAddStreamToFavorites}
-          offlineChannelCount={offlineChannelCount}
-          onRefreshOffline={handleRefreshOffline}
+          refreshableCount={refreshableCount}
+          onRefresh={handleRefresh}
           layoutTemplate={layoutTemplate}
           onLayoutChange={setLayoutTemplate}
           layoutStreamCount={visibleStreams.length}
